@@ -93,8 +93,8 @@ The script creates/reuses 12 demo accounts, upserts profiles, and seeds:
 
 - Keep employee auth invite-only.
 - `/index.html` redirects to `/app/login.html` so login is always the first page.
-- Temporary preview login is enabled in `js/auth.js`: username `bear`, password `1234`.
-- Temporary preview logins are device-local only; use Supabase-authenticated logins for cross-device shared data.
+- Temporary preview login (`bear/1234`, `admin/1234`) is available on `localhost` only when `allowTemporaryLogins` is true in `js/config.js`.
+- Production domains require Supabase-authenticated logins for shared cross-device data.
 - Do not expose admin/service keys in browser JS.
 - Use Pages Functions for privileged admin actions.
 - Admin invite flow calls `/api/admin/invite` and requires an admin session token.

@@ -31,6 +31,19 @@
     return Boolean(window.SITE_CONFIG.supabaseUrl && window.SITE_CONFIG.supabaseAnonKey);
   }
 
+  function isLocalDevHost() {
+    const host = String(window.location.hostname || "").trim().toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  }
+
+  function temporaryLoginFeatureEnabled() {
+    return Boolean(window.SITE_CONFIG && window.SITE_CONFIG.allowTemporaryLogins);
+  }
+
+  function isTemporaryLoginAllowed() {
+    return temporaryLoginFeatureEnabled() && isLocalDevHost();
+  }
+
   function sanitizeAvatarUrl(rawValue) {
     const value = String(rawValue || "").trim();
     if (!value || value === "null" || value === "undefined") {
@@ -264,6 +277,10 @@
   };
 
   GPortal.getTempSession = function getTempSession() {
+    if (!isTemporaryLoginAllowed()) {
+      clearTempSession();
+      return null;
+    }
     return readTempSession();
   };
 
@@ -278,7 +295,11 @@
   GPortal.getSession = async function getSession() {
     const temp = readTempSession();
     if (temp) {
-      return temp;
+      if (!isTemporaryLoginAllowed()) {
+        clearTempSession();
+      } else {
+        return temp;
+      }
     }
 
     if (!GPortal.hasSupabaseConfig()) {
@@ -385,6 +406,8 @@
     const password = GPortal.qs("#password");
     const googleLogin = GPortal.qs("#googleLogin");
     const appleLogin = GPortal.qs("#appleLogin");
+    const submitBtn = GPortal.qs("#loginForm button[type=\"submit\"]");
+    const tempAllowed = isTemporaryLoginAllowed();
 
     const existingSession = await GPortal.getSession();
     if (existingSession) {
@@ -408,16 +431,33 @@
         appleLogin.disabled = true;
       }
 
-      GPortal.showNotice(
-        status,
-        "Temporary logins enabled: bear/1234 (staff), admin/1234 (admin). Temporary mode is device-local and does not sync across devices.",
-        "ok"
-      );
+      if (tempAllowed) {
+        GPortal.showNotice(
+          status,
+          "Temporary logins enabled on localhost only: bear/1234 (staff), admin/1234 (admin).",
+          "ok"
+        );
+      } else {
+        if (email) {
+          email.disabled = true;
+        }
+        if (password) {
+          password.disabled = true;
+        }
+        if (submitBtn) {
+          submitBtn.disabled = true;
+        }
+        GPortal.showNotice(
+          status,
+          "Login unavailable: Supabase auth is not configured for this domain, and temporary logins are disabled.",
+          "error"
+        );
+      }
     }
 
     googleLogin?.addEventListener("click", async function onGoogleClick() {
       if (!supabaseReady || !sb) {
-        GPortal.showNotice(status, "Google login is unavailable in temporary preview mode.", "error");
+        GPortal.showNotice(status, "Google login is unavailable until Supabase auth is configured.", "error");
         return;
       }
 
@@ -430,7 +470,7 @@
 
     appleLogin?.addEventListener("click", async function onAppleClick() {
       if (!supabaseReady || !sb) {
-        GPortal.showNotice(status, "Apple login is unavailable in temporary preview mode.", "error");
+        GPortal.showNotice(status, "Apple login is unavailable until Supabase auth is configured.", "error");
         return;
       }
 
@@ -448,7 +488,7 @@
       const passwordValue = String(password.value || "");
       const account = tempAccountFromLogin(loginValue);
 
-      if (account && passwordValue === account.password) {
+      if (tempAllowed && account && passwordValue === account.password) {
         writeTempSession(account.username);
         GPortal.showNotice(status, "Temporary login successful. Data will stay on this device only.", "ok");
         window.location.href = account.role === "admin" ? "/app/staff.html" : "/app/dashboard.html";
@@ -456,7 +496,11 @@
       }
 
       if (!supabaseReady || !sb) {
-        GPortal.showNotice(status, "Invalid temporary login. Use bear/1234 or admin/1234.", "error");
+        if (tempAllowed) {
+          GPortal.showNotice(status, "Invalid temporary login. Use bear/1234 or admin/1234.", "error");
+        } else {
+          GPortal.showNotice(status, "Login unavailable until Supabase auth is configured.", "error");
+        }
         return;
       }
 

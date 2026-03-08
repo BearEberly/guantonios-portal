@@ -3,5 +3,6 @@ window.SITE_CONFIG = {
   supabaseUrl: "https://YOUR_PROJECT.supabase.co",
   supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
   oauthRedirectTo: `${window.location.origin}/app/dashboard.html`,
-  enablePublicSignup: false
+  enablePublicSignup: false,
+  allowTemporaryLogins: true
 };
