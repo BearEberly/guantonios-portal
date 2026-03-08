@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Resources | Guantonio's Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="resources">
+    <div id="siteHeaderMount"></div>
+
+
+    <main>
+      <section class="section">
+        <div class="container grid grid--2">
+          <article class="surface" style="padding:20px;">
+            <h1>Team Resources</h1>
+            <p>Use these quick links for daily operations. Move private docs into the staff portal once Supabase data is connected.</p>
+            <div class="grid" style="margin-top:14px;">
+              <a class="resource-link" href="/app/login.html"><strong>Staff Portal Login</strong><br /><span class="small">Schedules, tips, requests, training.</span></a>
+              <a class="resource-link" href="/app/sops.html"><strong>Operations SOPs</strong><br /><span class="small">Food safety, open/close, station checklists.</span></a>
+              <a class="resource-link" href="/app/training.html"><strong>Training Tracker</strong><br /><span class="small">Assigned modules and completions.</span></a>
+            </div>
+          </article>
+
+          <article class="surface" style="padding:20px;">
+            <h2>Public Contact Capture</h2>
+            <p class="small">Optional: keep using Google Apps Script for simple public forms.</p>
+            <form id="signupForm" action="" method="post" target="signup-submit-target" novalidate>
+              <div class="form-row">
+                <label for="firstName">First Name</label>
+                <input id="firstName" name="firstName" required />
+              </div>
+              <div class="form-row">
+                <label for="lastName">Last Name</label>
+                <input id="lastName" name="lastName" required />
+              </div>
+              <div class="form-row">
+                <label for="phoneNumber">Phone Number</label>
+                <input id="phoneNumber" name="phoneNumber" inputmode="tel" required />
+              </div>
+
+              <input id="appsScriptEndpoint" type="hidden" name="appsScriptEndpoint" />
+
+              <button class="btn btn--primary" type="submit">Submit</button>
+              <div id="signupStatus" class="notice" style="margin-top:12px;" hidden></div>
+            </form>
+            <iframe id="signup-submit-target" name="signup-submit-target" style="display:none;"></iframe>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

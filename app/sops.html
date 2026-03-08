@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SOPs | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="sops">
+    <div id="siteHeaderMount"></div>
+
+
+    <div class="app-shell">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <h1>SOP Library</h1>
+        <p id="whoami" class="small"></p>
+
+        <section id="sopUploadSection" class="card" style="margin-top:16px;" hidden>
+          <h3>Upload SOP</h3>
+          <form id="sopUploadForm" novalidate>
+            <div class="grid grid--2">
+              <div class="form-row">
+                <label for="sopTitle">Title</label>
+                <input id="sopTitle" maxlength="140" required />
+              </div>
+              <div class="form-row">
+                <label for="sopVisibility">Visibility</label>
+                <select id="sopVisibility" required>
+                  <option value="all">All Staff</option>
+                  <option value="manager">Managers + Admin</option>
+                  <option value="admin">Admin Only</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="sopDescription">Description</label>
+              <textarea id="sopDescription" maxlength="1200"></textarea>
+            </div>
+            <div class="form-row">
+              <label for="sopFile">File</label>
+              <input id="sopFile" type="file" required />
+            </div>
+            <button class="btn btn--primary" type="submit">Upload SOP</button>
+            <div id="sopUploadStatus" class="notice" style="margin-top:12px;" hidden></div>
+          </form>
+        </section>
+
+        <div id="sopList" class="grid" style="margin-top:16px;">
+          <div class="notice">Loading...</div>
+        </div>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

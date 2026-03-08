@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Tip Summary | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="tips-summary">
+    <div id="siteHeaderMount"></div>
+
+    <div class="app-shell">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main" id="tipsSummaryPage">
+        <div class="page-head page-head--tips page-head--tips-summary">
+          <section class="tips-top-left">
+            <div>
+              <h1>Tip Summary</h1>
+              <p class="small" id="whoami"></p>
+            </div>
+            <div class="tips-top-controls tips-summary-top-controls">
+              <div class="card tips-day-card">
+                <div class="form-row tips-period-start">
+                  <label for="tipsSummaryStartDate">Start Date</label>
+                  <input id="tipsSummaryStartDate" type="date" />
+                </div>
+                <div class="form-row tips-period-start">
+                  <label for="tipsSummaryEndDate">End Date</label>
+                  <input id="tipsSummaryEndDate" type="date" />
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="tips-mini-calendar" aria-label="Summary start-date calendar">
+            <div class="tips-mini-calendar__head">
+              <button class="tips-mini-calendar__nav" id="tipsSummaryCalendarPrev" type="button" aria-label="Previous month">‹</button>
+              <p class="tips-mini-calendar__month" id="tipsSummaryCalendarMonth">Month Year</p>
+              <button class="tips-mini-calendar__nav" id="tipsSummaryCalendarNext" type="button" aria-label="Next month">›</button>
+            </div>
+            <div class="tips-mini-calendar__weekdays" aria-hidden="true">
+              <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+            </div>
+            <div class="tips-mini-calendar__grid" id="tipsSummaryCalendarGrid"></div>
+          </section>
+          <section class="tips-summary-save-col" aria-label="Summary export">
+            <button class="btn btn--primary btn--small" id="tipsSummarySaveBtn" type="button">Save as PDF</button>
+            <p class="tips-save-flash" id="tipsSummarySaveFlash" aria-live="polite">Saved</p>
+          </section>
+        </div>
+
+        <section class="card table-wrap">
+          <h3>Daily Totals</h3>
+          <p class="small tips-summary-range" id="tipsSummaryRange">Select start and end dates to view this window.</p>
+          <table class="tips-summary-table">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Date</th>
+                <th>Tip Pool</th>
+                <th>Kitchen</th>
+                <th>Busser</th>
+                <th>Server</th>
+                <th>OOP</th>
+                <th>Total Paid</th>
+                <th>Difference</th>
+              </tr>
+            </thead>
+            <tbody id="tipsSummaryDayRows">
+              <tr><td colspan="9">Loading...</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="card table-wrap">
+          <h3>Employee Totals</h3>
+          <table class="tips-summary-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Days</th>
+                <th>Kitchen</th>
+                <th>Busser</th>
+                <th>Server</th>
+                <th>OOP</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="tipsSummaryEmployeeRows">
+              <tr><td colspan="7">Loading...</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

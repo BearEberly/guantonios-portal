@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Tips | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="tips">
+    <div id="siteHeaderMount"></div>
+
+
+    <div class="app-shell">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main" id="tipsPage">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <div class="page-head page-head--tips">
+          <section class="tips-top-left">
+            <div>
+              <h1>Tips</h1>
+            </div>
+            <div class="tips-top-controls">
+              <div class="card tips-day-card" id="tipsManagerDayCard">
+                <div class="tips-day-nav-wrap">
+                  <button class="tips-day-nav-btn" id="tipsDayPrev" type="button" aria-label="Previous day">‹</button>
+                  <div class="form-row tips-period-start">
+                    <label for="tipsDayDate">Day</label>
+                    <input id="tipsDayDate" type="date" />
+                  </div>
+                  <button class="tips-day-nav-btn" id="tipsDayNext" type="button" aria-label="Next day">›</button>
+                </div>
+              </div>
+              <div class="card tips-day-card" id="tipsStaffRangeCard" hidden>
+                <div class="grid grid--2 tips-staff-range-grid">
+                  <div class="form-row tips-period-start">
+                    <label for="tipsStaffStartDate">Start Date</label>
+                    <input id="tipsStaffStartDate" type="date" />
+                  </div>
+                  <div class="form-row tips-period-start">
+                    <label for="tipsStaffEndDate">End Date</label>
+                    <input id="tipsStaffEndDate" type="date" />
+                  </div>
+                </div>
+              </div>
+              <div class="tips-toolbar-actions tips-toolbar-actions--top" id="tipsManagerActions">
+                <button class="btn btn--primary btn--small" id="tipsSaveBtn" type="button">Save Day</button>
+                <a class="btn btn--small" href="/app/tips-summary.html">Tip Summary</a>
+                <span class="tips-save-indicator" id="tipsSavedBadge" hidden aria-live="polite">Saved</span>
+              </div>
+              <div class="tips-toolbar-actions tips-toolbar-actions--top" id="tipsStaffActions" hidden>
+                <button class="btn btn--primary btn--small" id="tipsStaffPdfBtn" type="button">Download PDF</button>
+              </div>
+            </div>
+          </section>
+          <section class="tips-mini-calendar" id="tipsMiniCalendarSection" aria-label="Selected day calendar">
+            <div class="tips-mini-calendar__head">
+              <button class="tips-mini-calendar__nav" id="tipsCalendarPrev" type="button" aria-label="Previous month">‹</button>
+              <p class="tips-mini-calendar__month" id="tipsCalendarMonth">Month Year</p>
+              <button class="tips-mini-calendar__nav" id="tipsCalendarNext" type="button" aria-label="Next month">›</button>
+            </div>
+            <div class="tips-mini-calendar__weekdays" aria-hidden="true">
+              <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+            </div>
+            <div class="tips-mini-calendar__grid" id="tipsCalendarGrid"></div>
+          </section>
+        </div>
+
+        <section class="card table-wrap" id="tipsStaffStatementsSection" hidden>
+          <h3>My Tips</h3>
+          <p class="small tips-summary-range" id="tipsStaffRangeLabel">Select a date range to view your tips.</p>
+          <table class="tips-summary-table">
+            <thead>
+              <tr>
+                <th>Start Date</th>
+                <th>End Date</th>
+                <th>Net Tips</th>
+              </tr>
+            </thead>
+            <tbody id="tipsStaffRows">
+              <tr><td colspan="3">Loading...</td></tr>
+            </tbody>
+          </table>
+          <p class="small tips-staff-total" id="tipsStaffTotal">Total in view: -</p>
+        </section>
+
+        <section class="card tips-input-card" id="tipsInputsSection">
+          <h3>Daily Inputs</h3>
+          <div class="grid grid--2">
+            <div class="form-row">
+              <label for="tipSquareTips">Square Tips</label>
+              <input id="tipSquareTips" type="number" inputmode="decimal" step="0.01" />
+            </div>
+            <div class="form-row">
+              <label for="tipLargePartyTips">Large Party Tips</label>
+              <input id="tipLargePartyTips" type="number" inputmode="decimal" step="0.01" />
+            </div>
+            <div class="form-row">
+              <label for="tipCashDue">Cash Due</label>
+              <input id="tipCashDue" type="number" inputmode="decimal" step="0.01" />
+            </div>
+            <div class="form-row">
+              <label for="tipCashOnHand">Cash On Hand</label>
+              <input id="tipCashOnHand" type="number" inputmode="decimal" step="0.01" />
+            </div>
+          </div>
+          <p class="tips-total-line">Tip Pool Total: <strong id="tipsPoolTotal">$0.00</strong></p>
+        </section>
+
+        <section class="card" id="tipsPoolSection">
+          <h3>Pool Breakdown</h3>
+          <div class="grid grid--3 tips-kpi-grid">
+            <p class="tips-kpi-line">Kitchen Pool: <strong id="tipsKitchenPool">$0.00</strong></p>
+            <p class="tips-kpi-line">Busser Pool: <strong id="tipsBusserPool">$0.00</strong></p>
+            <p class="tips-kpi-line">Server Pool: <strong id="tipsServerPool">$0.00</strong></p>
+            <p class="tips-kpi-line">Out of Pocket: <strong id="tipsOopTotal">$0.00</strong></p>
+            <p class="tips-kpi-line">Total Paid: <strong id="tipsPaidTotal">$0.00</strong></p>
+            <p class="tips-kpi-line">Difference: <strong id="tipsDifference">$0.00</strong></p>
+          </div>
+        </section>
+
+        <section class="card table-wrap" id="tipsSplitSection">
+          <h3>Daily Tip Split</h3>
+          <p class="small">Use manual override for one-off payouts. Role set to OOP pays from restaurant funds and does not reduce role pools.</p>
+          <table class="tips-roster-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Position</th>
+                <th>Manual Override</th>
+                <th>Final Tip</th>
+              </tr>
+            </thead>
+            <tbody id="tipsRosterRows">
+              <tr><td colspan="4">Loading...</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

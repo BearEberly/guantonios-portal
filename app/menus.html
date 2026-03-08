@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Menus | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="menus">
+    <div id="siteHeaderMount"></div>
+
+
+    <div class="app-shell">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <div class="menus-title-row">
+          <h1 style="margin:0;">Menus</h1>
+          <button class="btn btn--primary" id="menuUploadTriggerBtn" type="button" hidden>Upload Menu File</button>
+          <button class="btn btn--frame" id="menuSpecialTriggerBtn" type="button" hidden>Specials</button>
+        </div>
+        <p id="whoami" class="small"></p>
+        <div id="menuUploadStatus" class="notice" style="margin-top:10px;" hidden></div>
+
+        <section class="grid grid--2 menus-hub-grid" style="margin-top:16px;">
+          <article class="card">
+            <section id="menuFileViewer" class="menu-file-viewer">
+              <div class="notice">No menu file uploaded yet.</div>
+            </section>
+          </article>
+
+          <article class="card">
+            <h3>Menu Notes</h3>
+            <p class="small">Admin notes for staff about changes, sold-out items, and service reminders.</p>
+            <div class="form-row" style="margin-top:10px;">
+              <label for="menuNotesInput">Notes</label>
+              <textarea id="menuNotesInput" rows="14" maxlength="8000" placeholder="Add notes for the current menu..."></textarea>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn--primary" id="menuNotesSaveBtn" type="button">Save Notes</button>
+              <p class="small" id="menuNotesMeta" style="margin:0;">No notes saved yet.</p>
+            </div>
+            <div id="menuNotesStatus" class="notice" style="margin-top:10px;" hidden></div>
+
+            <div class="divider"></div>
+            <h3 style="margin-bottom:8px;">Current Specials</h3>
+            <section id="menuSpecialsList" class="menu-specials-list">
+              <div class="notice">No specials posted yet.</div>
+            </section>
+            <div id="menuSpecialStatus" class="notice" style="margin-top:10px;" hidden></div>
+          </article>
+        </section>
+
+        <section class="card menu-beverage-card" style="margin-top:16px;">
+          <h3>Beer + Wine</h3>
+          <p class="small">Track what you are currently carrying and add service notes for staff.</p>
+
+          <div class="grid grid--2 menu-beverage-grid" style="margin-top:10px;">
+            <div class="form-row" style="margin:0;">
+              <label for="menuBeverageCurrentInput">Currently Carrying</label>
+              <textarea
+                id="menuBeverageCurrentInput"
+                rows="12"
+                maxlength="10000"
+                placeholder="Example:\nBeer:\n- Peroni\n- Sierra Nevada Pale Ale\n\nWine:\n- Pinot Grigio\n- Chianti Classico"
+              ></textarea>
+            </div>
+
+            <div class="form-row" style="margin:0;">
+              <label for="menuBeverageNotesInput">Beer + Wine Notes</label>
+              <textarea
+                id="menuBeverageNotesInput"
+                rows="12"
+                maxlength="10000"
+                placeholder="Notes for staff:\n- What is low stock\n- New additions\n- Pairing suggestions"
+              ></textarea>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
+            <button class="btn btn--primary" id="menuBeverageSaveBtn" type="button">Save Beer + Wine</button>
+            <p class="small" id="menuBeverageMeta" style="margin:0;">No updates saved yet.</p>
+          </div>
+          <div id="menuBeverageStatus" class="notice" style="margin-top:10px;" hidden></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="menu-modal" id="menuUploadModal" hidden>
+      <div class="menu-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="menuUploadModalTitle">
+        <h3 id="menuUploadModalTitle">Upload Menu File</h3>
+        <div class="grid">
+          <div class="form-row menu-date-picker-hit" id="menuUploadDateRow" style="margin:0;">
+            <label for="menuUploadDateInput">Menu Date</label>
+            <input id="menuUploadDateInput" class="input" type="date" />
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label for="menuUploadFileInput">Choose File</label>
+            <input
+              id="menuUploadFileInput"
+              class="profile-file-input"
+              type="file"
+              accept=".pdf,.odt,.doc,.docx,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
+            />
+          </div>
+          <div class="menu-upload-file-preview" id="menuUploadFilePreview" aria-live="polite">
+            <span class="menu-upload-file-preview__badge" id="menuUploadFilePreviewBadge">FILE</span>
+            <img class="menu-upload-file-preview__thumb" id="menuUploadFilePreviewThumb" alt="" hidden />
+            <span class="menu-upload-file-preview__name" id="menuUploadFilePreviewName">No file selected.</span>
+          </div>
+        </div>
+        <div class="menu-modal__actions">
+          <button class="btn btn--frame" id="menuUploadModalCancelBtn" type="button">Cancel</button>
+          <button class="btn btn--primary" id="menuUploadModalSaveBtn" type="button">Upload Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu-modal" id="menuSpecialModal" hidden>
+      <div class="menu-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="menuSpecialModalTitle">
+        <h3 id="menuSpecialModalTitle">Add Special</h3>
+        <div class="grid">
+          <div class="form-row" style="margin:0;">
+            <label for="menuSpecialFileInput">Upload File</label>
+            <input
+              id="menuSpecialFileInput"
+              class="profile-file-input"
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf"
+            />
+          </div>
+          <div class="menu-special-file-preview" id="menuSpecialFilePreview" aria-live="polite">
+            <span class="menu-special-file-preview__badge" id="menuSpecialFilePreviewBadge">FILE</span>
+            <img class="menu-special-file-preview__thumb" id="menuSpecialFilePreviewThumb" alt="" hidden />
+            <span class="menu-special-file-preview__name" id="menuSpecialFilePreviewName">No file selected.</span>
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label for="menuSpecialNameInput">Special Name</label>
+            <input id="menuSpecialNameInput" class="input" type="text" maxlength="140" placeholder="Enter special name" />
+          </div>
+          <div class="form-row" style="margin:0;">
+            <label for="menuSpecialNotesInput">Notes</label>
+            <textarea id="menuSpecialNotesInput" rows="6" maxlength="3000" placeholder="Details staff should know about this special..."></textarea>
+          </div>
+        </div>
+        <div id="menuSpecialModalStatus" class="notice" hidden></div>
+        <div class="menu-modal__actions">
+          <button class="btn btn--frame" id="menuSpecialModalCancelBtn" type="button">Cancel</button>
+          <button class="btn btn--primary" id="menuSpecialModalSaveBtn" type="button">Save Special</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dashboard | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="dashboard">
+    <div id="siteHeaderMount"></div>
+
+
+    <div class="app-shell" id="dashboardPage">
+      <aside id="appNavMount" class="app-nav"></aside>
+
+      <main class="app-main">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <div class="page-head">
+          <div>
+            <h1>Dashboard</h1>
+          </div>
+        </div>
+
+        <section class="card" style="margin-bottom:16px;">
+          <h3>Announcements</h3>
+          <div id="announcements">Loading...</div>
+          <div class="divider"></div>
+          <h3 style="margin-bottom:8px;">Specials</h3>
+          <div id="dashboardSpecials">
+            <p class="small">No specials posted.</p>
+          </div>
+        </section>
+
+        <section class="grid grid--3">
+          <article class="card">
+            <h3>Next Shift</h3>
+            <div id="nextShift">Loading...</div>
+          </article>
+          <article class="card">
+            <h3>Tips</h3>
+            <p id="tipsSummary">Loading...</p>
+          </article>
+          <article class="card">
+            <h3>Training Due</h3>
+            <p id="trainingDue">Loading...</p>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

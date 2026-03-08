@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>User Profile | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="profile">
+    <div id="siteHeaderMount"></div>
+
+    <div class="app-shell" id="profilePage">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <h1>User Profile</h1>
+        <p id="whoami" class="small"></p>
+
+        <section class="card profile-card">
+          <form id="profileForm" novalidate>
+            <div class="profile-avatar-row">
+              <div class="profile-avatar-preview" id="profileAvatarPreview">
+                <img id="profileAvatarPreviewImg" alt="Profile photo preview" hidden />
+                <span id="profileAvatarPreviewInitial">B</span>
+              </div>
+              <div>
+                <label for="profilePhoto">Upload Picture</label>
+                <input id="profilePhoto" class="profile-file-input" type="file" accept="image/*" />
+                <p class="small profile-file-help">JPG, PNG, or WebP. Recommended max size: 2MB.</p>
+              </div>
+            </div>
+
+            <div class="grid grid--2" style="margin-top:14px;">
+              <div class="form-row">
+                <label for="profileFullName">Full Name</label>
+                <input id="profileFullName" maxlength="120" />
+              </div>
+              <div class="form-row">
+                <label for="profileEmail">Email</label>
+                <input id="profileEmail" type="email" autocomplete="email" required />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label for="profilePhone">Phone Number</label>
+              <input id="profilePhone" type="tel" autocomplete="tel" maxlength="30" />
+            </div>
+
+            <div class="profile-address-row">
+              <div class="form-row">
+                <label for="profileStreetAddress">Street Address</label>
+                <input id="profileStreetAddress" autocomplete="street-address" maxlength="180" />
+              </div>
+              <div class="form-row">
+                <label for="profileZip">ZIP Code</label>
+                <input id="profileZip" inputmode="numeric" autocomplete="postal-code" maxlength="5" />
+              </div>
+            </div>
+
+            <div class="profile-city-state-row">
+              <div class="form-row">
+                <label for="profileCity">City</label>
+                <input id="profileCity" autocomplete="address-level2" maxlength="80" />
+              </div>
+              <div class="form-row">
+                <label for="profileState">State</label>
+                <select id="profileState" autocomplete="address-level1">
+                  <option value="">State</option>
+                  <option value="AL">AL</option>
+                  <option value="AK">AK</option>
+                  <option value="AZ">AZ</option>
+                  <option value="AR">AR</option>
+                  <option value="CA">CA</option>
+                  <option value="CO">CO</option>
+                  <option value="CT">CT</option>
+                  <option value="DE">DE</option>
+                  <option value="FL">FL</option>
+                  <option value="GA">GA</option>
+                  <option value="HI">HI</option>
+                  <option value="ID">ID</option>
+                  <option value="IL">IL</option>
+                  <option value="IN">IN</option>
+                  <option value="IA">IA</option>
+                  <option value="KS">KS</option>
+                  <option value="KY">KY</option>
+                  <option value="LA">LA</option>
+                  <option value="ME">ME</option>
+                  <option value="MD">MD</option>
+                  <option value="MA">MA</option>
+                  <option value="MI">MI</option>
+                  <option value="MN">MN</option>
+                  <option value="MS">MS</option>
+                  <option value="MO">MO</option>
+                  <option value="MT">MT</option>
+                  <option value="NE">NE</option>
+                  <option value="NV">NV</option>
+                  <option value="NH">NH</option>
+                  <option value="NJ">NJ</option>
+                  <option value="NM">NM</option>
+                  <option value="NY">NY</option>
+                  <option value="NC">NC</option>
+                  <option value="ND">ND</option>
+                  <option value="OH">OH</option>
+                  <option value="OK">OK</option>
+                  <option value="OR">OR</option>
+                  <option value="PA">PA</option>
+                  <option value="RI">RI</option>
+                  <option value="SC">SC</option>
+                  <option value="SD">SD</option>
+                  <option value="TN">TN</option>
+                  <option value="TX">TX</option>
+                  <option value="UT">UT</option>
+                  <option value="VT">VT</option>
+                  <option value="VA">VA</option>
+                  <option value="WA">WA</option>
+                  <option value="WV">WV</option>
+                  <option value="WI">WI</option>
+                  <option value="WY">WY</option>
+                  <option value="DC">DC</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="profile-save-row">
+              <button class="btn btn--primary" type="submit">Save Profile</button>
+              <p id="profileSavedFlash" class="profile-save-flash">Saved</p>
+            </div>
+            <div id="profileStatus" class="notice" style="margin-top:12px;" hidden></div>
+          </form>
+        </section>
+
+        <section class="card profile-schedule-card">
+          <h3>Schedule</h3>
+          <p class="small">Standard hours: Tuesday through Saturday, 4:00 PM to 9:00 PM.</p>
+          <ul class="profile-schedule-list" id="profileScheduleList">
+            <li class="small">No scheduled days yet.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <div class="avatar-crop-modal" id="avatarCropModal" hidden>
+      <div class="avatar-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="avatarCropTitle">
+        <h2 id="avatarCropTitle">Adjust Profile Photo</h2>
+        <p class="small">Drag to position the circle. Use zoom to fine-tune the crop.</p>
+
+        <div class="avatar-crop-stage" id="avatarCropStage">
+          <img id="avatarCropImage" alt="Avatar crop preview" />
+          <div class="avatar-crop-overlay"></div>
+        </div>
+
+        <div class="avatar-crop-controls">
+          <label for="avatarCropZoom">Zoom</label>
+          <input id="avatarCropZoom" type="range" min="0.35" max="3.2" step="0.01" value="1" />
+        </div>
+
+        <div class="avatar-crop-actions">
+          <button class="btn btn--frame" id="avatarCropCancel" type="button">Cancel</button>
+          <button class="btn btn--primary" id="avatarCropApply" type="button">Use Photo</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

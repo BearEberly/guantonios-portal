@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="refresh" content="0; url=/app/login.html" />
+    <title>Guantonio's Staff Hub</title>
+    <meta name="description" content="Central communication hub for Guantonio's managers and employees." />
+    <script>
+      window.location.replace("/app/login.html");
+    </script>    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="index">
+    <div id="siteHeaderMount"></div>
+
+
+    <main>
+      <section class="section">
+        <div class="container hero">
+          <article class="surface hero__copy">
+            <span class="badge">Internal Staff Portal</span>
+            <h1>One place for schedules, updates, and team communication.</h1>
+            <p>
+              This hub is designed for Guantonio's employees, managers, and owners. Use it as the single source for announcements,
+              schedule links, training, requests, and daily operations.
+            </p>
+            <div class="hero__actions">
+              <a class="btn btn--primary" href="/app/login.html">Open Staff Login</a>
+              <a class="btn btn--frame" href="/resources.html">View Resources</a>
+            </div>
+          </article>
+
+          <aside class="surface hero__art" aria-label="Restaurant branding artwork">
+            <img src="/assets/restaurant-illustration.png" alt="Illustration of Guantonio's restaurant building" />
+            <div style="display:flex;align-items:center;gap:12px;">
+              <img class="hero__mark" src="/assets/g-mark.jpg" alt="Guantonio's G mark" />
+              <img src="/assets/wordmark.png" alt="Guantonio's wordmark" style="max-width:300px;" />
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section section--tight">
+        <div class="container grid grid--3">
+          <article class="card">
+            <h3>Management Announcements</h3>
+            <p>Owners and managers can post updates so everyone sees the same message at the same time.</p>
+          </article>
+          <article class="card">
+            <h3>Shift + Tips Access</h3>
+            <p>Each employee can view personal schedules and tip statements inside their own login.</p>
+          </article>
+          <article class="card">
+            <h3>Requests + Training</h3>
+            <p>Submit time-off or shift requests, and track training progress with one workflow.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section--tight">
+        <div class="container surface" style="padding:20px;">
+          <h2>Launch Goals (v1)</h2>
+          <ul class="list-clean">
+            <li>Invite-only employee accounts</li>
+            <li>Role-based visibility (employee, manager, admin)</li>
+            <li>Reliable announcement stream from management</li>
+            <li>Simple request and approval process</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container small">Guantonio's Wood Fired • Lodi, California</div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

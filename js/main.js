@@ -1,0 +1,17 @@
+(async function boot() {
+  const GPortal = window.GPortal;
+  const page = document.body.getAttribute("data-page") || GPortal.pathPage();
+
+  if (page !== "login") {
+    await GPortal.initHeader();
+  }
+  GPortal.initPublicSignup();
+  await GPortal.initLoginPage();
+
+  const appContext = await GPortal.bootstrapAppPage();
+  if (!appContext) {
+    return;
+  }
+
+  await GPortal.loadPageData(appContext.session, appContext.profile);
+})();

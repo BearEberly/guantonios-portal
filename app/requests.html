@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Requests | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="requests">
+    <div id="siteHeaderMount"></div>
+
+
+    <div class="app-shell">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <h1>Requests</h1>
+        <p id="whoami" class="small"></p>
+
+        <section class="card" style="margin-top:16px;">
+          <h3>Submit Request</h3>
+          <form id="requestForm" novalidate>
+            <div class="form-row">
+              <label for="requestType">Type</label>
+              <select id="requestType" required>
+                <option value="">Select request type</option>
+                <option value="TIME_OFF">Time Off</option>
+                <option value="SHIFT_SWAP">Shift Swap</option>
+                <option value="PAYROLL_QUESTION">Payroll Question</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="requestMessage">Message</label>
+              <textarea id="requestMessage" required></textarea>
+            </div>
+
+            <button class="btn btn--primary" type="submit">Send Request</button>
+            <div id="requestStatus" class="notice" style="margin-top:12px;" hidden></div>
+          </form>
+        </section>
+
+        <section class="card table-wrap" style="margin-top:16px;">
+          <h3>My Recent Requests</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="requestRows">
+              <tr><td colspan="4">Loading...</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

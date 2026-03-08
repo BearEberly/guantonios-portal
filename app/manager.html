@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Manager | Staff Hub</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="manager">
+    <div id="siteHeaderMount"></div>
+
+
+    <div class="app-shell" id="managerPage">
+      <aside id="appNavMount" class="app-nav"></aside>
+      <main class="app-main">
+        <div id="appSetupNotice" class="notice" hidden></div>
+        <h1>Manager</h1>
+        <p id="whoami" class="small"></p>
+
+        <section class="card" style="margin-top:16px;">
+          <h3>Post Announcement</h3>
+          <form id="announcementForm" novalidate>
+            <div class="form-row">
+              <label for="announcementTitle">Title</label>
+              <input id="announcementTitle" maxlength="120" required />
+            </div>
+            <div class="form-row">
+              <label for="announcementBody">Message</label>
+              <textarea id="announcementBody" maxlength="1200" required></textarea>
+            </div>
+            <button class="btn btn--primary" type="submit">Publish Announcement</button>
+            <div id="announcementStatus" class="notice" style="margin-top:12px;" hidden></div>
+          </form>
+        </section>
+
+        <section class="card" style="margin-top:16px;">
+          <h3>Recent Announcements</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Title</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="managerAnnouncementRows">
+                <tr><td colspan="3">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card" style="margin-top:16px;">
+          <h3>Shift Planner</h3>
+          <form id="shiftForm" novalidate>
+            <input id="shiftId" type="hidden" />
+            <div class="grid grid--2">
+              <div class="form-row">
+                <label for="shiftEmployee">Employee</label>
+                <select id="shiftEmployee" required>
+                  <option value="">Loading employees...</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="shiftStation">Station</label>
+                <input id="shiftStation" maxlength="80" placeholder="Line, Prep, Server, Host..." required />
+              </div>
+            </div>
+            <div class="grid grid--2">
+              <div class="form-row">
+                <label for="shiftStart">Start</label>
+                <input id="shiftStart" type="datetime-local" required />
+              </div>
+              <div class="form-row">
+                <label for="shiftEnd">End</label>
+                <input id="shiftEnd" type="datetime-local" required />
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn--primary" id="shiftSubmitBtn" type="submit">Create Shift</button>
+              <button class="btn" id="shiftCancelBtn" type="button" hidden>Cancel Edit</button>
+            </div>
+            <div id="shiftStatus" class="notice" style="margin-top:12px;" hidden></div>
+          </form>
+
+          <div class="divider"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Employee</th>
+                  <th>Station</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="managerShiftRows">
+                <tr><td colspan="5">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card" style="margin-top:16px;">
+          <h3>Team Requests</h3>
+          <div id="managerRequestStatus" class="notice" style="margin-bottom:12px;" hidden></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Employee ID</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Message</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="managerRequestRows">
+                <tr><td colspan="6">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

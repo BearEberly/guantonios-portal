@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Staff Login | Guantonio's</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="login">
+    <div id="siteHeaderMount"></div>
+
+
+    <main class="section login-content">
+      <div class="container grid grid--2">
+        <section>
+          <span class="badge">Staff Access</span>
+          <h1>Employee Hub Login</h1>
+          <p>Use your invited staff account to access schedules, requests, tips, and training records.</p>
+          <div class="notice">Accounts should be invite-only. Ask a manager if you need access.</div>
+        </section>
+
+        <section class="card">
+          <form id="loginForm" novalidate>
+            <div class="form-row">
+              <label for="email">Email or Username</label>
+              <input id="email" type="text" autocomplete="username" required />
+            </div>
+
+            <div class="form-row">
+              <label for="password">Password</label>
+              <input id="password" type="password" autocomplete="current-password" required minlength="4" />
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:4px;">
+              <button class="btn btn--primary" type="submit">Log In</button>
+              <a class="small" href="/app/reset.html">Forgot password?</a>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="grid">
+              <button class="btn btn--frame" id="googleLogin" type="button">Continue with Google</button>
+              <button class="btn btn--frame" id="appleLogin" type="button">Continue with Apple</button>
+            </div>
+
+            <div id="loginStatus" class="notice" style="margin-top:14px;" hidden></div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/site.js"></script>
+    <script src="/js/public.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/pages.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>
