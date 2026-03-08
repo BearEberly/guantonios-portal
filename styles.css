@@ -274,7 +274,7 @@ small,
 }
 
 .mobile-menu-toggle {
-  display: none;
+  display: none !important;
   align-items: center;
   gap: 8px;
   min-height: 40px;
@@ -1276,7 +1276,7 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
 }
 
 .app-nav__close {
-  display: none;
+  display: none !important;
   min-height: 30px;
   padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -1289,6 +1289,7 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
 }
 
 .app-nav__section-label {
+  display: none !important;
   margin: 6px 0 3px;
   color: rgba(245, 232, 236, 0.72);
   font-size: 0.78rem;

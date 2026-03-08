@@ -1,5 +1,6 @@
 (function bootstrapSiteNamespace() {
   const GPortal = (window.GPortal = window.GPortal || {});
+  const PARTIAL_VERSION = "20260308f";
 
   GPortal.qs = function qs(selector, root) {
     return (root || document).querySelector(selector);
@@ -122,7 +123,7 @@
   };
 
   GPortal.initHeader = async function initHeader() {
-    await GPortal.mountPartial("#siteHeaderMount", "/partials/header.html");
+    await GPortal.mountPartial("#siteHeaderMount", `/partials/header.html?v=${PARTIAL_VERSION}`);
     GPortal.initDropdown();
     GPortal.markPublicNav();
   };

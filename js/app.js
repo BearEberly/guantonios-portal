@@ -1,5 +1,6 @@
 (function setupAppShell() {
   const GPortal = window.GPortal;
+  const PARTIAL_VERSION = "20260308f";
 
   function isProtectedPage(page) {
     const openPages = new Set(["login", "reset"]);
@@ -228,7 +229,7 @@
   };
 
   GPortal.initAppLayout = async function initAppLayout(session, profile) {
-    await GPortal.mountPartial("#appNavMount", "/partials/app-nav.html");
+    await GPortal.mountPartial("#appNavMount", `/partials/app-nav.html?v=${PARTIAL_VERSION}`);
 
     const page = document.body.getAttribute("data-page") || GPortal.pathPage();
     const isAdmin = profile.role === "admin";
