@@ -115,19 +115,37 @@ body::after {
   background: rgba(243, 244, 246, 0.62);
 }
 
-/* Login page should always be fully interactive and not dimmed */
+/* Login page: restore fade-in while staying fully interactive */
 body[data-page="login"] .login-content {
-  opacity: 1;
-  animation: none;
+  position: relative;
+  z-index: 220;
+  opacity: 0;
+  animation: login-content-fade-in 2s ease forwards;
+  pointer-events: auto;
 }
 
 body[data-page="login"]::after {
-  background: rgba(243, 244, 246, 0.08);
+  display: none;
+}
+
+@keyframes login-content-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 body[data-page="login"] .app-nav-overlay {
   display: none !important;
   pointer-events: none !important;
+}
+
+body[data-page="login"] #appNavOverlay {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
 }
 
 body[data-page="login"].app-nav-open {
