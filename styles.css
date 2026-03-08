@@ -117,13 +117,17 @@ body::after {
 
 /* Login content fade-in over 1s while background is visible first */
 body[data-page="login"] .login-content {
-  opacity: 0;
+  opacity: 0.86;
   animation: login-content-fade-in 2s ease forwards;
+}
+
+body[data-page="login"]::after {
+  background: rgba(243, 244, 246, 0.28);
 }
 
 @keyframes login-content-fade-in {
   from {
-    opacity: 0;
+    opacity: 0.86;
   }
   to {
     opacity: 1;
