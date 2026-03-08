@@ -68,6 +68,47 @@
 
 (function setupSharedUi() {
   const GPortal = window.GPortal;
+  const PARTIAL_VERSION = "20260308g";
+  const HEADER_FALLBACK_HTML = `
+<header class="site-header">
+  <div class="container nav-wrap">
+    <a class="brand" href="/index.html" aria-label="Guantonio's Home">
+      <img class="brand__word" src="/assets/wordmark-top.png" alt="Guantonio's wordmark" />
+    </a>
+
+    <div class="header-actions">
+      <button
+        class="mobile-menu-toggle"
+        id="mobileMenuToggle"
+        type="button"
+        aria-label="Open portal menu"
+        aria-expanded="false"
+      >
+        <span class="mobile-menu-toggle__bars" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+        <span class="mobile-menu-toggle__text">Menu</span>
+      </button>
+      <div class="header-profile" id="headerProfileArea" hidden>
+        <button class="header-profile__trigger" id="profileMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false">
+          <span class="header-profile__trigger-name" id="profileHeaderName">Bear</span>
+          <span class="header-profile__avatar" id="profileAvatarBadge">
+            <img class="header-profile__avatar-img" id="profileAvatarImg" alt="Profile photo" hidden />
+            <span class="header-profile__avatar-text" id="profileInitial">B</span>
+          </span>
+        </button>
+        <div class="header-profile__menu" id="profileMenu" role="menu" aria-label="Profile menu">
+          <p class="header-profile__name" id="profileMenuName">Bear</p>
+          <a href="/app/profile.html" role="menuitem">User Profile</a>
+          <button id="headerLogoutBtn" type="button" role="menuitem">Log Out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+  `.trim();
 
   GPortal.mountPartial = async function mountPartial(targetSelector, partialPath) {
     const target = GPortal.qs(targetSelector);
@@ -123,7 +164,19 @@
   };
 
   GPortal.initHeader = async function initHeader() {
-    await GPortal.mountPartial("#siteHeaderMount", `/partials/header.html?v=${PARTIAL_VERSION}`);
+    const mountSelector = "#siteHeaderMount";
+    const partialPath = `/partials/header.html?v=${PARTIAL_VERSION}`;
+    const mount = GPortal.qs(mountSelector);
+    if (!mount) {
+      return;
+    }
+
+    try {
+      await GPortal.mountPartial(mountSelector, partialPath);
+    } catch (error) {
+      console.warn("Header partial failed, using inline fallback.", error);
+      mount.innerHTML = HEADER_FALLBACK_HTML;
+    }
     GPortal.initDropdown();
     GPortal.markPublicNav();
   };

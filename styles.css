@@ -274,7 +274,7 @@ small,
 }
 
 .mobile-menu-toggle {
-  display: none !important;
+  display: none;
   align-items: center;
   gap: 8px;
   min-height: 40px;
