@@ -1,4 +1,8 @@
 (async function boot() {
+  if (window.GPortalConfigReady && typeof window.GPortalConfigReady.then === "function") {
+    await window.GPortalConfigReady;
+  }
+
   const GPortal = window.GPortal;
   const page = document.body.getAttribute("data-page") || GPortal.pathPage();
 

@@ -27,8 +27,27 @@
     return Boolean(window.supabase);
   }
 
+  function isPlaceholderValue(rawValue) {
+    const value = String(rawValue || "").trim();
+    if (!value) {
+      return true;
+    }
+    const upper = value.toUpperCase();
+    return (
+      upper.includes("YOUR_PROJECT") ||
+      upper.includes("YOUR_SUPABASE") ||
+      upper.includes("YOUR_") ||
+      upper.includes("REPLACE_ME")
+    );
+  }
+
   function hasConfig() {
-    return Boolean(window.SITE_CONFIG.supabaseUrl && window.SITE_CONFIG.supabaseAnonKey);
+    return Boolean(
+      window.SITE_CONFIG.supabaseUrl &&
+      window.SITE_CONFIG.supabaseAnonKey &&
+      !isPlaceholderValue(window.SITE_CONFIG.supabaseUrl) &&
+      !isPlaceholderValue(window.SITE_CONFIG.supabaseAnonKey)
+    );
   }
 
   function isLocalDevHost() {

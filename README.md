@@ -48,6 +48,8 @@ Static-first employee hub for Guantonio's staff.
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `ALLOW_TEMPORARY_LOGINS` (`false` in production, optional `true` for localhost dev)
+   - `APPS_SCRIPT_URL` (optional public signup endpoint for `/api/public-config`)
    - `INVITE_REDIRECT_TO` (optional, example: `https://your-domain.com/app/reset.html`)
    - `SOPS_BUCKET` (recommended: `staff-sops`)
    - `SOP_DOWNLOAD_TTL` (seconds, default: `900`)
@@ -95,6 +97,7 @@ The script creates/reuses 12 demo accounts, upserts profiles, and seeds:
 - `/index.html` redirects to `/app/login.html` so login is always the first page.
 - Temporary preview login (`bear/1234`, `admin/1234`) is available on `localhost` only when `allowTemporaryLogins` is true in `js/config.js`.
 - Production domains require Supabase-authenticated logins for shared cross-device data.
+- Frontend runtime config is served from `/api/public-config` so production keys come from Cloudflare env vars instead of hardcoded JS.
 - Do not expose admin/service keys in browser JS.
 - Use Pages Functions for privileged admin actions.
 - Admin invite flow calls `/api/admin/invite` and requires an admin session token.
