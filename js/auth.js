@@ -373,6 +373,10 @@
       return;
     }
 
+    // Defensive cleanup in case a stale mobile-nav overlay/class leaks into login.
+    document.body.classList.remove("app-nav-open", "schedule-can-edit", "schedule-staff-view");
+    GPortal.qs("#appNavOverlay")?.remove();
+
     maybeResetTempProfileFromUrl();
 
     const status = GPortal.qs("#loginStatus");
