@@ -39,6 +39,7 @@ Static-first employee hub for Guantonio's staff.
    - If your database was already initialized with an older version, run `/db/migrations/2026-03-03-hardening.sql` after.
    - Then run `/db/migrations/2026-03-04-sops-storage-and-shifts.sql` for SOP upload/storage enhancements.
    - Then run `/db/migrations/2026-03-05-square-oauth-integrations.sql` for Square OAuth self-service integration tables.
+   - Then run `/db/migrations/2026-03-08-portal-shared-state.sql` for cross-device sync of staff/schedule/tips/menu local modules.
 3. In Supabase Auth settings:
    - add `http://localhost:8788/app/dashboard.html` and your production URL as redirect URLs.
    - configure Google provider.
@@ -93,6 +94,7 @@ The script creates/reuses 12 demo accounts, upserts profiles, and seeds:
 - Keep employee auth invite-only.
 - `/index.html` redirects to `/app/login.html` so login is always the first page.
 - Temporary preview login is enabled in `js/auth.js`: username `bear`, password `1234`.
+- Temporary preview logins are device-local only; use Supabase-authenticated logins for cross-device shared data.
 - Do not expose admin/service keys in browser JS.
 - Use Pages Functions for privileged admin actions.
 - Admin invite flow calls `/api/admin/invite` and requires an admin session token.

@@ -186,6 +186,13 @@ create table if not exists public.integration_oauth_states (
 create index if not exists integration_oauth_states_exp_idx
 on public.integration_oauth_states (expires_at);
 
+create table if not exists public.portal_state (
+  state_key text primary key,
+  payload jsonb not null default '{}'::jsonb,
+  updated_by uuid references public.profiles(id),
+  updated_at timestamptz not null default now()
+);
+
 create or replace function public.current_role()
 returns public.app_role
 language sql
@@ -220,6 +227,7 @@ alter table public.sops enable row level security;
 alter table public.checklist_submissions enable row level security;
 alter table public.integration_square_connections enable row level security;
 alter table public.integration_oauth_states enable row level security;
+alter table public.portal_state enable row level security;
 
 create policy "profiles self read" on public.profiles
 for select to authenticated
@@ -326,3 +334,16 @@ create policy "admins manage oauth states" on public.integration_oauth_states
 for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+create policy "employees view portal state" on public.portal_state
+for select to authenticated
+using (true);
+
+create policy "managers update portal state" on public.portal_state
+for insert to authenticated
+with check (public.is_manager_or_admin());
+
+create policy "managers edit portal state" on public.portal_state
+for update to authenticated
+using (public.is_manager_or_admin())
+with check (public.is_manager_or_admin());

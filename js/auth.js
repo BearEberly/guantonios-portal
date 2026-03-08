@@ -408,7 +408,11 @@
         appleLogin.disabled = true;
       }
 
-      GPortal.showNotice(status, "Temporary logins enabled: bear/1234 (staff), admin/1234 (admin).", "ok");
+      GPortal.showNotice(
+        status,
+        "Temporary logins enabled: bear/1234 (staff), admin/1234 (admin). Temporary mode is device-local and does not sync across devices.",
+        "ok"
+      );
     }
 
     googleLogin?.addEventListener("click", async function onGoogleClick() {
@@ -446,7 +450,7 @@
 
       if (account && passwordValue === account.password) {
         writeTempSession(account.username);
-        GPortal.showNotice(status, "Temporary login successful.", "ok");
+        GPortal.showNotice(status, "Temporary login successful. Data will stay on this device only.", "ok");
         window.location.href = account.role === "admin" ? "/app/staff.html" : "/app/dashboard.html";
         return;
       }

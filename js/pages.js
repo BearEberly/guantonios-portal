@@ -1749,6 +1749,14 @@
   const SCHEDULE_STORAGE_KEY = "gportal_schedule_grid_v1";
   const SQUARE_INTEGRATION_STORAGE_KEY = "gportal_square_integration_v1";
   const MENU_HUB_STORAGE_KEY = "gportal_menu_hub_v1";
+  const PORTAL_STATE_TABLE = "portal_state";
+  const PORTAL_SYNC_STATE_KEYS = [
+    STAFF_ROSTER_STORAGE_KEY,
+    SCHEDULE_STORAGE_KEY,
+    TIP_WORKBOOK_STORAGE_KEY,
+    SQUARE_INTEGRATION_STORAGE_KEY,
+    MENU_HUB_STORAGE_KEY
+  ];
   const SCHEDULE_DEFAULT_START_CLOCK = "16:00";
   const SCHEDULE_DEFAULT_END_CLOCK = "21:00";
   const SCHEDULE_EXTENDED_START_CLOCK = "13:00";
@@ -1788,6 +1796,240 @@
     "role-theme--oop",
     "role-theme--off"
   ];
+  const portalStateSync = {
+    session: null,
+    profile: null,
+    hydrated: false,
+    loading: null,
+    writeQueue: new Map(),
+    flushTimer: null,
+    supported: true,
+    lastError: "",
+    listenersBound: false
+  };
+
+  function safeParseJson(rawValue) {
+    try {
+      return JSON.parse(rawValue);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function readRawLocalState(stateKey) {
+    const raw = window.localStorage.getItem(stateKey);
+    if (!raw) {
+      return null;
+    }
+    return safeParseJson(raw);
+  }
+
+  function writeRawLocalState(stateKey, payload) {
+    if (payload === undefined) {
+      return;
+    }
+    window.localStorage.setItem(stateKey, JSON.stringify(payload));
+  }
+
+  function canUsePortalSync(session) {
+    return Boolean(session && !session.isTemp && GPortal.hasSupabaseConfig());
+  }
+
+  function setPortalSyncContext(session, profile) {
+    portalStateSync.session = session || null;
+    portalStateSync.profile = profile || null;
+
+    if (!portalStateSync.listenersBound) {
+      window.addEventListener("beforeunload", function onBeforeUnload() {
+        if (portalStateSync.flushTimer) {
+          window.clearTimeout(portalStateSync.flushTimer);
+          portalStateSync.flushTimer = null;
+        }
+        void flushPortalSyncWrites();
+      });
+
+      document.addEventListener("visibilitychange", function onVisibilityChange() {
+        if (document.visibilityState === "hidden") {
+          if (portalStateSync.flushTimer) {
+            window.clearTimeout(portalStateSync.flushTimer);
+            portalStateSync.flushTimer = null;
+          }
+          void flushPortalSyncWrites();
+        }
+      });
+
+      portalStateSync.listenersBound = true;
+    }
+  }
+
+  function queuePortalSyncWrite(stateKey, payload) {
+    if (!canUsePortalSync(portalStateSync.session) || !portalStateSync.supported) {
+      return;
+    }
+
+    if (!PORTAL_SYNC_STATE_KEYS.includes(stateKey)) {
+      return;
+    }
+
+    portalStateSync.writeQueue.set(stateKey, payload);
+    if (portalStateSync.flushTimer) {
+      window.clearTimeout(portalStateSync.flushTimer);
+    }
+    portalStateSync.flushTimer = window.setTimeout(function flushSoon() {
+      portalStateSync.flushTimer = null;
+      void flushPortalSyncWrites();
+    }, 220);
+  }
+
+  async function flushPortalSyncWrites() {
+    if (!canUsePortalSync(portalStateSync.session) || !portalStateSync.supported) {
+      return;
+    }
+
+    if (!portalStateSync.writeQueue.size) {
+      return;
+    }
+
+    const pendingRows = Array.from(portalStateSync.writeQueue.entries()).map(function mapPending(entry) {
+      return {
+        state_key: entry[0],
+        payload: entry[1],
+        updated_by: portalStateSync.session.user.id,
+        updated_at: new Date().toISOString()
+      };
+    });
+    portalStateSync.writeQueue.clear();
+
+    try {
+      const sb = GPortal.getSupabase();
+      const result = await sb
+        .from(PORTAL_STATE_TABLE)
+        .upsert(pendingRows, { onConflict: "state_key" });
+      if (result.error) {
+        portalStateSync.lastError = String(result.error.message || result.error || "Unknown portal sync error");
+        console.warn("Portal shared-state write failed.", result.error);
+      } else {
+        portalStateSync.lastError = "";
+      }
+    } catch (error) {
+      portalStateSync.lastError = String(error && error.message ? error.message : error);
+      console.warn("Portal shared-state write failed.", error);
+    }
+  }
+
+  async function hydratePortalSyncState(session) {
+    if (!canUsePortalSync(session) || !portalStateSync.supported) {
+      return;
+    }
+
+    if (portalStateSync.hydrated) {
+      return;
+    }
+
+    if (portalStateSync.loading) {
+      await portalStateSync.loading;
+      return;
+    }
+
+    portalStateSync.loading = (async function runHydration() {
+      try {
+        const sb = GPortal.getSupabase();
+        const remote = await sb
+          .from(PORTAL_STATE_TABLE)
+          .select("state_key,payload")
+          .in("state_key", PORTAL_SYNC_STATE_KEYS);
+
+        if (remote.error) {
+          portalStateSync.lastError = String(remote.error.message || remote.error || "Unknown portal sync error");
+          if (String(remote.error.message || "").toLowerCase().includes("portal_state")) {
+            portalStateSync.supported = false;
+          }
+          console.warn("Portal shared-state hydration failed.", remote.error);
+          return;
+        }
+
+        const remoteByKey = new Map();
+        (remote.data || []).forEach(function mapRow(row) {
+          if (!row || !row.state_key) {
+            return;
+          }
+          remoteByKey.set(String(row.state_key), row.payload);
+        });
+
+        const seedRows = [];
+        PORTAL_SYNC_STATE_KEYS.forEach(function forEachStateKey(stateKey) {
+          if (remoteByKey.has(stateKey)) {
+            const payload = remoteByKey.get(stateKey);
+            if (payload !== null && payload !== undefined) {
+              writeRawLocalState(stateKey, payload);
+            }
+            return;
+          }
+
+          const localPayload = readRawLocalState(stateKey);
+          if (localPayload !== null) {
+            seedRows.push({
+              state_key: stateKey,
+              payload: localPayload,
+              updated_by: session.user.id,
+              updated_at: new Date().toISOString()
+            });
+          }
+        });
+
+        if (seedRows.length) {
+          const seedResult = await sb
+            .from(PORTAL_STATE_TABLE)
+            .upsert(seedRows, { onConflict: "state_key" });
+          if (seedResult.error) {
+            portalStateSync.lastError = String(seedResult.error.message || seedResult.error || "Unknown portal sync error");
+            console.warn("Portal shared-state seed failed.", seedResult.error);
+          }
+        }
+
+        portalStateSync.hydrated = true;
+        portalStateSync.lastError = "";
+      } catch (error) {
+        portalStateSync.lastError = String(error && error.message ? error.message : error);
+        console.warn("Portal shared-state hydration failed.", error);
+      } finally {
+        portalStateSync.loading = null;
+      }
+    })();
+
+    await portalStateSync.loading;
+  }
+
+  function renderPortalDataModeNotice(session, profile) {
+    const notice = GPortal.qs("#appSetupNotice");
+    if (!notice) {
+      return;
+    }
+
+    const canManage = Boolean(profile && (profile.role === "admin" || profile.role === "manager"));
+
+    if (session && session.isTemp) {
+      GPortal.showNotice(
+        notice,
+        "Temporary login mode is device-local. Data changed here does not sync across devices.",
+        "error"
+      );
+      return;
+    }
+
+    if (portalStateSync.lastError && canManage) {
+      GPortal.showNotice(
+        notice,
+        "Shared sync is not ready. Run db/migrations/2026-03-08-portal-shared-state.sql in Supabase.",
+        "error"
+      );
+      return;
+    }
+
+    notice.hidden = true;
+    notice.textContent = "";
+    notice.classList.remove("notice--error", "notice--ok");
+  }
 
   function roleThemeKey(roleValue) {
     const role = String(roleValue || "").trim();
@@ -2108,6 +2350,7 @@
   function writeStaffRows(rows) {
     const normalized = normalizeStaffRows(rows);
     window.localStorage.setItem(STAFF_ROSTER_STORAGE_KEY, JSON.stringify(normalized));
+    queuePortalSyncWrite(STAFF_ROSTER_STORAGE_KEY, normalized);
   }
 
   function uniqueNames(names) {
@@ -2196,6 +2439,7 @@
   function writeScheduleBook(scheduleBook) {
     const normalized = normalizeScheduleBook(scheduleBook);
     window.localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(normalized));
+    queuePortalSyncWrite(SCHEDULE_STORAGE_KEY, normalized);
   }
 
   function tipNamesFromStaffRows(staffRows) {
@@ -2367,6 +2611,7 @@
     const revision = String(Date.now());
     window.localStorage.setItem(TIP_WORKBOOK_STORAGE_KEY, JSON.stringify(normalized));
     window.localStorage.setItem(TIP_WORKBOOK_REV_KEY, revision);
+    queuePortalSyncWrite(TIP_WORKBOOK_STORAGE_KEY, normalized);
     window.dispatchEvent(new CustomEvent("gportal:tips-workbook-updated", { detail: { revision: revision } }));
   }
 
@@ -2400,6 +2645,7 @@
   function writeSquareIntegrationState(nextState) {
     const normalized = normalizeSquareIntegrationState(nextState);
     window.localStorage.setItem(SQUARE_INTEGRATION_STORAGE_KEY, JSON.stringify(normalized));
+    queuePortalSyncWrite(SQUARE_INTEGRATION_STORAGE_KEY, normalized);
     return normalized;
   }
 
@@ -2491,6 +2737,7 @@
   function writeMenuHubState(nextState) {
     const normalized = normalizeMenuHubState(nextState);
     window.localStorage.setItem(MENU_HUB_STORAGE_KEY, JSON.stringify(normalized));
+    queuePortalSyncWrite(MENU_HUB_STORAGE_KEY, normalized);
     window.dispatchEvent(new CustomEvent("gportal:menu-hub-updated"));
     return normalized;
   }
@@ -8150,6 +8397,10 @@
       window.location.href = "/app/staff.html";
       return;
     }
+
+    setPortalSyncContext(session, profile);
+    await hydratePortalSyncState(session);
+    renderPortalDataModeNotice(session, profile);
 
     if (page === "menus") {
       await loadMenus(session, profile);
