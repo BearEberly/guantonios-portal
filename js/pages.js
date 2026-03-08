@@ -264,10 +264,12 @@
   async function loadSchedule(session, profile) {
     const headRow = GPortal.qs("#scheduleGridHead");
     const body = GPortal.qs("#scheduleGridRows");
+    const mobileList = GPortal.qs("#scheduleMobileList");
     const savedSection = GPortal.qs("#scheduleSavedSection");
     const savedHeadRow = GPortal.qs("#scheduleSavedGridHead");
     const savedRoleCountsRow = GPortal.qs("#scheduleSavedGridRoleCounts");
     const savedBody = GPortal.qs("#scheduleSavedGridRows");
+    const savedMobileList = GPortal.qs("#scheduleSavedMobileList");
     const savedRange = GPortal.qs("#scheduleSavedRange");
     const whoami = GPortal.qs("#whoami");
     const weekAnchorInput = GPortal.qs("#scheduleWeekAnchor");
@@ -292,6 +294,7 @@
       }
     }
     document.body.classList.toggle("schedule-staff-view", !canEdit);
+    document.body.classList.toggle("schedule-can-edit", Boolean(canEdit));
 
     let scheduleBook = readScheduleBook();
     let weekStart = sundayForIso(scheduleBook.week_anchor || localIsoDate(new Date()));
@@ -820,6 +823,9 @@
       if (!rows.length) {
         currentStaffName = "";
         body.innerHTML = "<tr><td colspan='8'>No staff added yet.</td></tr>";
+        if (mobileList) {
+          mobileList.innerHTML = "<p class='small schedule-mobile-empty'>No staff added yet.</p>";
+        }
         return;
       }
 
@@ -868,6 +874,72 @@
 
             return (originalIndexByName.get(a.name) || 0) - (originalIndexByName.get(b.name) || 0);
           });
+
+      function renderMobileBody(orderedRowsValue) {
+        if (!mobileList) {
+          return;
+        }
+
+        mobileList.innerHTML = orderedRowsValue.map(function mapMobileRow(row) {
+          const isCurrent = !canEdit && currentName && row.name === currentName;
+          const position = String(row.position || "Off");
+          const roleCode = roleBadgeCode(position);
+          const roleClass = roleCardClass(position);
+
+          return `
+            <article class="schedule-mobile-row${isCurrent ? " schedule-mobile-row--current" : ""}">
+              <header class="schedule-mobile-row__head">
+                <div class="schedule-mobile-row__staff">
+                  <div class="schedule-staff-name">
+                    <span>${escapedHtml(row.name)}</span>
+                    ${isCurrent ? "<span class='schedule-me-pill'>You</span>" : ""}
+                  </div>
+                  <span class="schedule-staff-position">${escapedHtml(position)}</span>
+                </div>
+              </header>
+              <div class="schedule-mobile-days">
+                ${weekDates.map(function mapMobileDay(dateIso) {
+                  const scheduled = isScheduled(row.name, dateIso);
+                  const detail = getShiftDetail(row.name, dateIso);
+                  const slotClass = scheduled ? roleClass : "schedule-shift-card--off";
+                  const dayLabel = weekdayShort(dateIso);
+                  const dayStamp = monthDay(dateIso);
+                  const cardMarkup = `
+                    <span class="schedule-mobile-day-label">
+                      <strong>${dayLabel}</strong>
+                      <span>${dayStamp}</span>
+                    </span>
+                    <span class="schedule-shift-card ${canEdit ? "schedule-shift-card--edit " : ""}${slotClass}">
+                      <span class="schedule-shift-card__role">${roleCode}</span>
+                      <span class="schedule-shift-card__time">${scheduleShiftCardHtml(detail)}</span>
+                    </span>
+                  `;
+
+                  if (canEdit) {
+                    return `
+                      <button
+                        class="schedule-mobile-slot-btn"
+                        type="button"
+                        data-schedule-slot-name="${escapedHtml(row.name)}"
+                        data-schedule-slot-date="${dateIso}"
+                        aria-label="Set ${escapedHtml(row.name)} shift on ${longDateFull(dateIso)}"
+                      >
+                        ${cardMarkup}
+                      </button>
+                    `;
+                  }
+
+                  return `
+                    <div class="schedule-mobile-slot" aria-label="${longDateFull(dateIso)}">
+                      ${cardMarkup}
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </article>
+          `;
+        }).join("");
+      }
 
       body.innerHTML = orderedRows.map(function mapStaff(row) {
         const isCurrent = !canEdit && currentName && row.name === currentName;
@@ -936,6 +1008,8 @@
           </tr>
         `;
       }).join("");
+
+      renderMobileBody(orderedRows);
     }
 
     function renderSavedScheduleGrid() {
@@ -961,12 +1035,15 @@
       });
 
       const summaryDates = runningDatesFrom(weekStart, SAVED_SCHEDULE_DAYS);
-      const dayHasAssignments = summaryDates.map(function mapDay(dateIso) {
-        return Array.isArray(scheduleBook.assignments[dateIso]) && scheduleBook.assignments[dateIso].length > 0;
-      });
-      const roleCountsByDay = summaryDates.map(function mapRoleCounts(dateIso) {
-        const counts = { kitchen: 0, servers: 0, bussers: 0 };
+      const dayNamesByDay = summaryDates.map(function mapDayNames(dateIso) {
         const names = Array.isArray(scheduleBook.assignments[dateIso]) ? scheduleBook.assignments[dateIso] : [];
+        return uniqueNames(names);
+      });
+      const dayHasAssignments = dayNamesByDay.map(function mapDay(names) {
+        return names.length > 0;
+      });
+      const roleCountsByDay = dayNamesByDay.map(function mapRoleCounts(names) {
+        const counts = { kitchen: 0, servers: 0, bussers: 0 };
         names.forEach(function countRole(name) {
           const row = rowByName.get(String(name || "").trim());
           const role = String(row && row.position || "").trim();
@@ -1015,8 +1092,53 @@
         }).join("")}
       `;
 
+      if (savedMobileList) {
+        savedMobileList.innerHTML = summaryDates.map(function mapMobileDay(dateIso, dayIndex) {
+          const names = dayNamesByDay[dayIndex];
+          const counts = roleCountsByDay[dayIndex];
+          const empty = !names.length;
+          return `
+            <article class="schedule-saved-mobile-day${empty ? " schedule-saved-mobile-day--empty" : ""}">
+              <header class="schedule-saved-mobile-day__head">
+                <span class="schedule-saved-mobile-day__date">
+                  <strong>${weekdayShort(dateIso)}</strong>
+                  <span>${monthDay(dateIso)}</span>
+                </span>
+                <span class="schedule-saved-mobile-day__total">${names.length} staff</span>
+              </header>
+              <div class="schedule-saved-mobile-day__counts" aria-label="Kitchen ${counts.kitchen}, Servers ${counts.servers}, Bussers ${counts.bussers}">
+                <span><strong>KT</strong>${counts.kitchen}</span>
+                <span><strong>SV</strong>${counts.servers}</span>
+                <span><strong>BS</strong>${counts.bussers}</span>
+              </div>
+              ${empty ? `
+                <p class="small schedule-saved-mobile-day__empty">No one scheduled</p>
+              ` : `
+                <ul class="schedule-saved-mobile-people">
+                  ${names.map(function mapPerson(name) {
+                    const row = rowByName.get(String(name || "").trim());
+                    const role = String(row && row.position || "Off");
+                    const roleCode = roleBadgeCode(role);
+                    const toneClass = savedShiftToneClass(role);
+                    return `
+                      <li>
+                        <span class="schedule-saved-mobile-person__role ${toneClass}">${roleCode}</span>
+                        <span class="schedule-saved-mobile-person__name">${escapedHtml(name)}</span>
+                      </li>
+                    `;
+                  }).join("")}
+                </ul>
+              `}
+            </article>
+          `;
+        }).join("");
+      }
+
       if (!rows.length) {
         savedBody.innerHTML = `<tr><td colspan="${summaryDates.length + 1}">No staff added yet.</td></tr>`;
+        if (savedMobileList) {
+          savedMobileList.innerHTML = "<p class='small schedule-saved-mobile-empty'>No staff added yet.</p>";
+        }
         return;
       }
 
@@ -1322,10 +1444,13 @@
       hideSlotPopover(true);
     }
 
-    if (canEdit && slotPopover) {
-      body.addEventListener("click", function onScheduleSlotClick(event) {
+    function bindScheduleSlotClicks(targetRoot) {
+      if (!targetRoot) {
+        return;
+      }
+      targetRoot.addEventListener("click", function onScheduleSlotClick(event) {
         const slotButton = event.target.closest("button[data-schedule-slot-name][data-schedule-slot-date]");
-        if (!slotButton || !body.contains(slotButton)) {
+        if (!slotButton || !targetRoot.contains(slotButton)) {
           return;
         }
         event.preventDefault();
@@ -1340,6 +1465,11 @@
         }
         openSlotPopover(name, dateIso, slotButton);
       });
+    }
+
+    if (canEdit && slotPopover) {
+      bindScheduleSlotClicks(body);
+      bindScheduleSlotClicks(mobileList);
 
       slotPopover.addEventListener("click", function onSlotPopoverClick(event) {
         const presetButton = event.target.closest("button[data-schedule-popover-preset]");
@@ -5061,51 +5191,72 @@
       const addRowHtml = showAddRow
         ? `
           <tr class="staff-row staff-row--adder">
-            <td>
-              <input
-                class="staff-name-input"
-                type="text"
-                data-staff-add-field="name"
-                maxlength="80"
-                value="${escapedHtml(addDraft.name)}"
-                placeholder="Employee name"
-              />
-            </td>
-            <td>
-              <select
-                class="staff-position-select ${addRoleThemeClass}"
-                data-role-colored="true"
-                data-staff-add-field="position"
-              >${addOptions}</select>
-            </td>
-            <td>
-              <span class="status-pill status-pill--ok staff-add-status">Active</span>
-            </td>
-            <td>
-              <input
-                class="staff-email-input"
-                type="email"
-                data-staff-add-field="email"
-                maxlength="120"
-                value="${escapedHtml(addDraft.email)}"
-                placeholder="Email"
-              />
-            </td>
-            <td>
-              <input
-                class="staff-phone-input"
-                type="tel"
-                data-staff-add-field="phone"
-                maxlength="24"
-                value="${escapedHtml(addDraft.phone)}"
-                placeholder="Phone"
-              />
-            </td>
-            <td>
-              <span class="small staff-add-userid">Auto</span>
-            </td>
-            <td class="staff-actions">
-              <button class="btn btn--primary btn--small" type="button" data-staff-action="add">Add</button>
+            <td colspan="7">
+              <div class="staff-add-form" role="group" aria-label="Add employee">
+                <div class="form-row">
+                  <label for="staffAddNameInput">Employee Name</label>
+                  <input
+                    id="staffAddNameInput"
+                    class="staff-name-input"
+                    type="text"
+                    data-staff-add-field="name"
+                    maxlength="80"
+                    value="${escapedHtml(addDraft.name)}"
+                    placeholder="Employee name"
+                  />
+                </div>
+
+                <div class="form-row">
+                  <label for="staffAddPositionSelect">Position</label>
+                  <select
+                    id="staffAddPositionSelect"
+                    class="staff-position-select ${addRoleThemeClass}"
+                    data-role-colored="true"
+                    data-staff-add-field="position"
+                  >${addOptions}</select>
+                </div>
+
+                <div class="form-row">
+                  <label>Status</label>
+                  <span class="status-pill status-pill--ok staff-add-status">Active</span>
+                </div>
+
+                <div class="form-row">
+                  <label for="staffAddEmailInput">Email</label>
+                  <input
+                    id="staffAddEmailInput"
+                    class="staff-email-input"
+                    type="email"
+                    data-staff-add-field="email"
+                    maxlength="120"
+                    value="${escapedHtml(addDraft.email)}"
+                    placeholder="Email"
+                  />
+                </div>
+
+                <div class="form-row">
+                  <label for="staffAddPhoneInput">Phone</label>
+                  <input
+                    id="staffAddPhoneInput"
+                    class="staff-phone-input"
+                    type="tel"
+                    data-staff-add-field="phone"
+                    maxlength="24"
+                    value="${escapedHtml(addDraft.phone)}"
+                    placeholder="Phone"
+                  />
+                </div>
+
+                <div class="form-row">
+                  <label>User ID</label>
+                  <span class="small staff-add-userid">Auto</span>
+                </div>
+
+                <div class="form-row staff-add-submit-wrap">
+                  <span class="staff-add-submit-label" aria-hidden="true">Add</span>
+                  <button class="btn btn--primary btn--small staff-add-submit" type="button" data-staff-action="add">Add Employee</button>
+                </div>
+              </div>
             </td>
           </tr>
         `

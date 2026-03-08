@@ -43,23 +43,26 @@
               <p class="schedule-save-flash" id="scheduleSavedFlash" aria-live="polite">Saved</p>
             </div>
           </div>
-          <table class="schedule-grid-table">
-            <thead>
-              <tr id="scheduleGridHead">
-                <th>Name</th>
-                <th>Sun</th>
-                <th>Mon</th>
-                <th>Tue</th>
-                <th>Wed</th>
-                <th>Thu</th>
-                <th>Fri</th>
-                <th>Sat</th>
-              </tr>
-            </thead>
-            <tbody id="scheduleGridRows">
-              <tr><td colspan="8">Loading...</td></tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="schedule-grid-table">
+              <thead>
+                <tr id="scheduleGridHead">
+                  <th>Name</th>
+                  <th>Sun</th>
+                  <th>Mon</th>
+                  <th>Tue</th>
+                  <th>Wed</th>
+                  <th>Thu</th>
+                  <th>Fri</th>
+                  <th>Sat</th>
+                </tr>
+              </thead>
+              <tbody id="scheduleGridRows">
+                <tr><td colspan="8">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="schedule-mobile-list" id="scheduleMobileList" aria-live="polite"></div>
         </section>
 
         <section class="card table-wrap schedule-saved-card" id="scheduleSavedSection" hidden>
@@ -69,19 +72,22 @@
             <p class="small schedule-saved-range" id="scheduleSavedRange">17-day running view</p>
             <button class="schedule-week-nav" id="scheduleSavedNext" type="button" aria-label="Next week (saved schedule)">›</button>
           </div>
-          <table class="schedule-saved-table">
-            <thead>
-              <tr id="scheduleSavedGridHead">
-                <th>Name</th>
-              </tr>
-              <tr id="scheduleSavedGridRoleCounts">
-                <th>Roles</th>
-              </tr>
-            </thead>
-            <tbody id="scheduleSavedGridRows">
-              <tr><td colspan="18">Loading...</td></tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="schedule-saved-table">
+              <thead>
+                <tr id="scheduleSavedGridHead">
+                  <th>Name</th>
+                </tr>
+                <tr id="scheduleSavedGridRoleCounts">
+                  <th>Roles</th>
+                </tr>
+              </thead>
+              <tbody id="scheduleSavedGridRows">
+                <tr><td colspan="18">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="schedule-saved-mobile-list" id="scheduleSavedMobileList" aria-live="polite"></div>
         </section>
       </main>
     </div>

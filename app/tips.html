@@ -68,18 +68,20 @@
         <section class="card table-wrap" id="tipsStaffStatementsSection" hidden>
           <h3>My Tips</h3>
           <p class="small tips-summary-range" id="tipsStaffRangeLabel">Select a date range to view your tips.</p>
-          <table class="tips-summary-table">
-            <thead>
-              <tr>
-                <th>Start Date</th>
-                <th>End Date</th>
-                <th>Net Tips</th>
-              </tr>
-            </thead>
-            <tbody id="tipsStaffRows">
-              <tr><td colspan="3">Loading...</td></tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="tips-summary-table">
+              <thead>
+                <tr>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Net Tips</th>
+                </tr>
+              </thead>
+              <tbody id="tipsStaffRows">
+                <tr><td colspan="3">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
           <p class="small tips-staff-total" id="tipsStaffTotal">Total in view: -</p>
         </section>
 
@@ -121,19 +123,21 @@
         <section class="card table-wrap" id="tipsSplitSection">
           <h3>Daily Tip Split</h3>
           <p class="small">Use manual override for one-off payouts. Role set to OOP pays from restaurant funds and does not reduce role pools.</p>
-          <table class="tips-roster-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Position</th>
-                <th>Manual Override</th>
-                <th>Final Tip</th>
-              </tr>
-            </thead>
-            <tbody id="tipsRosterRows">
-              <tr><td colspan="4">Loading...</td></tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="tips-roster-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Position</th>
+                  <th>Manual Override</th>
+                  <th>Final Tip</th>
+                </tr>
+              </thead>
+              <tbody id="tipsRosterRows">
+                <tr><td colspan="4">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
       </main>
