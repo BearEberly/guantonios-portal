@@ -1,6 +1,22 @@
 (function setupAppShell() {
   const GPortal = window.GPortal;
-  const PARTIAL_VERSION = "20260308f";
+  const PARTIAL_VERSION = "20260308h";
+  const APP_NAV_FALLBACK_HTML = `
+<nav aria-label="Staff portal navigation">
+  <div class="app-nav__top">
+    <p class="app-nav__title">Portal Menu</p>
+  </div>
+  <a href="/app/staff.html" id="staffLink" data-app-nav="staff" hidden>Staff</a>
+  <a href="/app/schedule.html" data-app-nav="schedule">Schedule</a>
+  <a href="/app/tips.html" data-app-nav="tips">Tips</a>
+  <a href="/app/menus.html" data-app-nav="menus">Menus</a>
+  <a href="/app/training.html" data-app-nav="training">Training</a>
+  <a href="/app/sops.html" data-app-nav="sops">SOPs</a>
+  <a href="/app/requests.html" data-app-nav="requests">Requests</a>
+
+  <button class="btn btn--primary" id="logoutBtn" type="button">Log Out</button>
+</nav>
+  `.trim();
 
   function isProtectedPage(page) {
     const openPages = new Set(["login", "reset"]);
@@ -229,7 +245,19 @@
   };
 
   GPortal.initAppLayout = async function initAppLayout(session, profile) {
-    await GPortal.mountPartial("#appNavMount", `/partials/app-nav.html?v=${PARTIAL_VERSION}`);
+    const navSelector = "#appNavMount";
+    const navPath = `/partials/app-nav.html?v=${PARTIAL_VERSION}`;
+    const navMount = GPortal.qs(navSelector);
+    if (!navMount) {
+      return;
+    }
+
+    try {
+      await GPortal.mountPartial(navSelector, navPath);
+    } catch (error) {
+      console.warn("App nav partial failed, using inline fallback.", error);
+      navMount.innerHTML = APP_NAV_FALLBACK_HTML;
+    }
 
     const page = document.body.getAttribute("data-page") || GPortal.pathPage();
     const isAdmin = profile.role === "admin";

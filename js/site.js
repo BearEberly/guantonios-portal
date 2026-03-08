@@ -68,7 +68,7 @@
 
 (function setupSharedUi() {
   const GPortal = window.GPortal;
-  const PARTIAL_VERSION = "20260308g";
+  const PARTIAL_VERSION = "20260308h";
   const HEADER_FALLBACK_HTML = `
 <header class="site-header">
   <div class="container nav-wrap">

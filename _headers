@@ -1,0 +1,15 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/js/*
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/partials/*
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/*.html
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/app/*.html
+  Cache-Control: no-store, max-age=0, must-revalidate
