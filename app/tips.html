@@ -14,23 +14,34 @@
       <aside id="appNavMount" class="app-nav"></aside>
       <main class="app-main" id="tipsPage">
         <div id="appSetupNotice" class="notice" hidden></div>
+        <section class="tips-workbook-banner" aria-label="Tips workbook heading">
+          <div>
+            <p class="tips-workbook-banner__eyebrow">Workbook View</p>
+            <h1>Tips Ledger</h1>
+            <p class="tips-workbook-banner__note">Organized to feel closer to the existing daily Excel sheets while we transition into the portal.</p>
+          </div>
+          <div class="tips-workbook-banner__meta">
+            <span class="tips-workbook-chip">Daily Entry</span>
+            <span class="tips-workbook-chip tips-workbook-chip--muted">Manager Worksheet</span>
+          </div>
+        </section>
+
         <div class="page-head page-head--tips">
           <section class="tips-top-left">
-            <div>
-              <h1>Tips</h1>
-            </div>
             <div class="tips-top-controls">
-              <div class="card tips-day-card" id="tipsManagerDayCard">
+              <div class="card tips-day-card tips-sheet-card" id="tipsManagerDayCard">
+                <div class="tips-sheet-card__label">Sheet Controls</div>
                 <div class="tips-day-nav-wrap">
                   <button class="tips-day-nav-btn" id="tipsDayPrev" type="button" aria-label="Previous day">‹</button>
                   <div class="form-row tips-period-start">
-                    <label for="tipsDayDate">Day</label>
+                    <label for="tipsDayDate">Business Date</label>
                     <input id="tipsDayDate" type="date" />
                   </div>
                   <button class="tips-day-nav-btn" id="tipsDayNext" type="button" aria-label="Next day">›</button>
                 </div>
               </div>
-              <div class="card tips-day-card" id="tipsStaffRangeCard" hidden>
+              <div class="card tips-day-card tips-sheet-card" id="tipsStaffRangeCard" hidden>
+                <div class="tips-sheet-card__label">Statement Range</div>
                 <div class="grid grid--2 tips-staff-range-grid">
                   <div class="form-row tips-period-start">
                     <label for="tipsStaffStartDate">Start Date</label>
@@ -85,31 +96,45 @@
           <p class="small tips-staff-total" id="tipsStaffTotal">Total in view: -</p>
         </section>
 
-        <section class="card tips-input-card" id="tipsInputsSection">
-          <h3>Daily Inputs</h3>
-          <div class="grid grid--2">
-            <div class="form-row">
-              <label for="tipSquareTips">Square Tips</label>
+        <section class="card tips-input-card tips-sheet-surface" id="tipsInputsSection">
+          <div class="tips-sheet-titlebar">
+            <div>
+              <h3>Daily Inputs</h3>
+              <p class="small">Enter the same figures you would normally place on the daily workbook tabs.</p>
+            </div>
+            <p class="tips-sheet-titlebar__formula">Pool = Square Tips + Large Party + Cash Due + Cash On Hand</p>
+          </div>
+          <div class="tips-ledger-grid" aria-label="Tip input ledger">
+            <div class="tips-ledger-grid__head">Line Item</div>
+            <div class="tips-ledger-grid__head">Amount</div>
+            <label class="tips-ledger-cell tips-ledger-cell--label" for="tipSquareTips">Square Tips</label>
+            <div class="tips-ledger-cell">
               <input id="tipSquareTips" type="number" inputmode="decimal" step="0.01" />
             </div>
-            <div class="form-row">
-              <label for="tipLargePartyTips">Large Party Tips</label>
+            <label class="tips-ledger-cell tips-ledger-cell--label" for="tipLargePartyTips">Large Party Tips</label>
+            <div class="tips-ledger-cell">
               <input id="tipLargePartyTips" type="number" inputmode="decimal" step="0.01" />
             </div>
-            <div class="form-row">
-              <label for="tipCashDue">Cash Due</label>
+            <label class="tips-ledger-cell tips-ledger-cell--label" for="tipCashDue">Cash Due</label>
+            <div class="tips-ledger-cell">
               <input id="tipCashDue" type="number" inputmode="decimal" step="0.01" />
             </div>
-            <div class="form-row">
-              <label for="tipCashOnHand">Cash On Hand</label>
+            <label class="tips-ledger-cell tips-ledger-cell--label" for="tipCashOnHand">Cash On Hand</label>
+            <div class="tips-ledger-cell">
               <input id="tipCashOnHand" type="number" inputmode="decimal" step="0.01" />
             </div>
+            <div class="tips-ledger-cell tips-ledger-cell--total-label">Tip Pool Total</div>
+            <div class="tips-ledger-cell tips-ledger-cell--total-value"><strong id="tipsPoolTotal">$0.00</strong></div>
           </div>
-          <p class="tips-total-line">Tip Pool Total: <strong id="tipsPoolTotal">$0.00</strong></p>
         </section>
 
-        <section class="card" id="tipsPoolSection">
-          <h3>Pool Breakdown</h3>
+        <section class="card tips-sheet-surface" id="tipsPoolSection">
+          <div class="tips-sheet-titlebar">
+            <div>
+              <h3>Pool Breakdown</h3>
+              <p class="small">Live worksheet totals, grouped the way a spreadsheet summary block would read.</p>
+            </div>
+          </div>
           <div class="grid grid--3 tips-kpi-grid">
             <p class="tips-kpi-line">Kitchen Pool: <strong id="tipsKitchenPool">$0.00</strong></p>
             <p class="tips-kpi-line">Busser Pool: <strong id="tipsBusserPool">$0.00</strong></p>
@@ -120,17 +145,22 @@
           </div>
         </section>
 
-        <section class="card table-wrap" id="tipsSplitSection">
-          <h3>Daily Tip Split</h3>
+        <section class="card table-wrap tips-sheet-surface" id="tipsSplitSection">
+          <div class="tips-sheet-titlebar">
+            <div>
+              <h3>Daily Tip Split</h3>
+              <p class="small">Roster rows mirror the payout sheet so role edits and one-off overrides stay familiar.</p>
+            </div>
+          </div>
           <p class="small">Use manual override for one-off payouts. Role set to OOP pays from restaurant funds and does not reduce role pools.</p>
           <div class="table-scroll">
-            <table class="tips-roster-table">
+            <table class="tips-roster-table tips-sheet-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Position</th>
+                  <th>Employee</th>
+                  <th>Role</th>
                   <th>Manual Override</th>
-                  <th>Final Tip</th>
+                  <th>Net Tip</th>
                 </tr>
               </thead>
               <tbody id="tipsRosterRows">

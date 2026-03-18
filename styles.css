@@ -1365,6 +1365,71 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
   line-height: 1.2;
 }
 
+.tips-workbook-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  margin-bottom: 10px;
+  border: 1px solid #adc9b8;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(246, 250, 247, 0.98) 100%),
+    linear-gradient(90deg, rgba(33, 115, 70, 0.08) 0, rgba(33, 115, 70, 0.08) 1px, transparent 1px, transparent 48px),
+    linear-gradient(rgba(33, 115, 70, 0.06) 0, rgba(33, 115, 70, 0.06) 1px, transparent 1px, transparent 28px);
+  background-size: auto, 48px 100%, 100% 28px;
+  box-shadow: 0 16px 34px rgba(23, 61, 39, 0.08);
+}
+
+.tips-workbook-banner h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 2vw, 2.2rem);
+}
+
+.tips-workbook-banner__eyebrow {
+  margin: 0 0 6px;
+  color: #1f6e43;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.tips-workbook-banner__note {
+  margin: 6px 0 0;
+  max-width: 620px;
+  color: #506358;
+}
+
+.tips-workbook-banner__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tips-workbook-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #90b59f;
+  border-radius: 999px;
+  background: #f6fbf7;
+  color: #1b5b37;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tips-workbook-chip--muted {
+  border-color: #d1d8d3;
+  background: #ffffff;
+  color: #5b645d;
+}
+
 .page-head--tips {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 252px;
@@ -1408,6 +1473,24 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
 
 .tips-day-card {
   padding: 8px;
+}
+
+.tips-sheet-card {
+  border-color: #b7ccb9;
+  background:
+    linear-gradient(180deg, #fefefe 0%, #fafdfb 100%),
+    linear-gradient(90deg, rgba(33, 115, 70, 0.05) 0, rgba(33, 115, 70, 0.05) 1px, transparent 1px, transparent 40px),
+    linear-gradient(rgba(33, 115, 70, 0.04) 0, rgba(33, 115, 70, 0.04) 1px, transparent 1px, transparent 24px);
+  background-size: auto, 40px 100%, 100% 24px;
+}
+
+.tips-sheet-card__label {
+  margin-bottom: 8px;
+  color: #1f6e43;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .tips-day-nav-wrap {
@@ -1647,6 +1730,110 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
   margin-top: 10px;
 }
 
+.tips-sheet-surface {
+  border-color: #b7ccb9;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #fbfdfb 100%),
+    linear-gradient(90deg, rgba(33, 115, 70, 0.04) 0, rgba(33, 115, 70, 0.04) 1px, transparent 1px, transparent 52px),
+    linear-gradient(rgba(33, 115, 70, 0.035) 0, rgba(33, 115, 70, 0.035) 1px, transparent 1px, transparent 30px);
+  background-size: auto, 52px 100%, 100% 30px;
+}
+
+.tips-sheet-titlebar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #d7e7da;
+}
+
+.tips-sheet-titlebar h3 {
+  margin-bottom: 2px;
+}
+
+.tips-sheet-titlebar .small {
+  margin: 0;
+}
+
+.tips-sheet-titlebar__formula {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid #cddfcf;
+  border-radius: 10px;
+  background: #f4f9f5;
+  color: #245535;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tips-ledger-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.9fr);
+  border: 1px solid #bfd3c2;
+  background: #ffffff;
+}
+
+.tips-ledger-grid__head,
+.tips-ledger-cell {
+  min-height: 52px;
+  padding: 10px 12px;
+  border-right: 1px solid #d6e3d8;
+  border-bottom: 1px solid #d6e3d8;
+}
+
+.tips-ledger-grid__head:nth-child(2n),
+.tips-ledger-cell:nth-child(2n) {
+  border-right: 0;
+}
+
+.tips-ledger-grid__head {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(180deg, #2d7d4c 0%, #20663c 100%);
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tips-ledger-cell {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.tips-ledger-cell--label {
+  margin: 0;
+  font-weight: 600;
+  color: #274635;
+}
+
+.tips-ledger-cell input {
+  width: 100%;
+  margin: 0;
+  border-color: #b8cfbc;
+  background: #fcfffc;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tips-ledger-cell--total-label,
+.tips-ledger-cell--total-value {
+  background: #eef7f0;
+  font-weight: 700;
+}
+
+.tips-ledger-cell--total-value {
+  justify-content: flex-end;
+  color: #17492b;
+  font-variant-numeric: tabular-nums;
+}
+
 .tips-total-line {
   margin-top: 6px;
 }
@@ -1657,16 +1844,18 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
 
 .tips-kpi-line {
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: #ffffff;
+  padding: 11px 12px;
+  border: 1px solid #c8d9cb;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbf8 100%);
   font-size: 0.9rem;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
 .tips-kpi-line strong {
   color: var(--ink);
   margin-left: 6px;
+  font-variant-numeric: tabular-nums;
 }
 
 .tips-kpi-line.is-alert strong {
@@ -1747,15 +1936,17 @@ body[data-page]:not([data-page="login"]):not([data-page="reset"]) .site-header .
   min-width: 54px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  font-weight: 700;
+  color: #184f2f;
 }
 
 .tips-override-btn {
   width: 100%;
   max-width: 62px;
   height: 30px;
-  border: 1px solid var(--line);
+  border: 1px solid #b7cdbb;
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f9f5 100%);
   color: var(--ink);
   font: inherit;
   font-size: 0.82rem;
@@ -2026,8 +2217,40 @@ select[data-role-colored="true"] option[value="Off"] {
   min-width: 760px;
 }
 
+.tips-sheet-table {
+  border-collapse: collapse;
+  border: 1px solid #bfd3c2;
+  background: #ffffff;
+}
+
+.tips-sheet-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, #2d7d4c 0%, #20663c 100%);
+  color: #ffffff;
+  border-color: #1b5b37;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.73rem;
+}
+
+.tips-sheet-table tbody td {
+  border-color: #d6e3d8;
+  background: #ffffff;
+}
+
+.tips-sheet-table tbody tr:nth-child(even) td {
+  background: #f8fcf8;
+}
+
+.tips-sheet-table tbody td:nth-child(n + 3) {
+  font-variant-numeric: tabular-nums;
+}
+
 .tips-summary-total-row td {
   font-weight: 700;
+  background: #edf6ef !important;
 }
 
 .schedule-toolbar {
@@ -3818,12 +4041,31 @@ body.avatar-crop-open {
     align-items: flex-start;
   }
 
+  .tips-workbook-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tips-workbook-banner__meta {
+    justify-content: flex-start;
+  }
+
   .tips-top-controls {
     width: min(320px, 100%);
   }
 
   .tips-mini-calendar {
     width: min(100%, 320px);
+  }
+
+  .tips-sheet-titlebar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tips-sheet-titlebar__formula {
+    text-align: left;
+    white-space: normal;
   }
 
   .card {
@@ -4186,6 +4428,14 @@ body.avatar-crop-open {
     width: 100%;
   }
 
+  .tips-workbook-banner {
+    padding: 14px;
+  }
+
+  .tips-workbook-banner h1 {
+    font-size: 1.45rem;
+  }
+
   .tips-day-nav-wrap {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -4214,6 +4464,38 @@ body.avatar-crop-open {
 
   .tips-mini-calendar {
     width: 100%;
+  }
+
+  .tips-ledger-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tips-ledger-grid__head:nth-child(1) {
+    display: none;
+  }
+
+  .tips-ledger-grid__head:nth-child(2) {
+    border-top: 0;
+  }
+
+  .tips-ledger-grid__head,
+  .tips-ledger-cell {
+    border-right: 0;
+  }
+
+  .tips-ledger-cell {
+    min-height: 46px;
+    padding: 9px 10px;
+  }
+
+  .tips-ledger-cell--label {
+    padding-bottom: 5px;
+    border-bottom: 0;
+    background: #f6fbf7;
+  }
+
+  .tips-ledger-cell--label + .tips-ledger-cell {
+    padding-top: 0;
   }
 
   .tips-save-indicator {

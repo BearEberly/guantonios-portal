@@ -12,14 +12,26 @@
     <div class="app-shell">
       <aside id="appNavMount" class="app-nav"></aside>
       <main class="app-main" id="tipsSummaryPage">
+        <section class="tips-workbook-banner tips-workbook-banner--summary" aria-label="Tip summary workbook heading">
+          <div>
+            <p class="tips-workbook-banner__eyebrow">Workbook View</p>
+            <h1>Tip Summary Ledger</h1>
+            <p class="tips-workbook-banner__note">Range totals and employee rollups presented more like the Excel summary tabs.</p>
+          </div>
+          <div class="tips-workbook-banner__meta">
+            <span class="tips-workbook-chip">Summary Sheet</span>
+            <span class="tips-workbook-chip tips-workbook-chip--muted">Export Ready</span>
+          </div>
+        </section>
+
         <div class="page-head page-head--tips page-head--tips-summary">
           <section class="tips-top-left">
             <div>
-              <h1>Tip Summary</h1>
               <p class="small" id="whoami"></p>
             </div>
             <div class="tips-top-controls tips-summary-top-controls">
-              <div class="card tips-day-card">
+              <div class="card tips-day-card tips-sheet-card">
+                <div class="tips-sheet-card__label">Report Window</div>
                 <div class="form-row tips-period-start">
                   <label for="tipsSummaryStartDate">Start Date</label>
                   <input id="tipsSummaryStartDate" type="date" />
@@ -48,11 +60,11 @@
           </section>
         </div>
 
-        <section class="card table-wrap">
+        <section class="card table-wrap tips-sheet-surface">
           <h3>Daily Totals</h3>
           <p class="small tips-summary-range" id="tipsSummaryRange">Select start and end dates to view this window.</p>
           <div class="table-scroll">
-            <table class="tips-summary-table">
+            <table class="tips-summary-table tips-sheet-table">
               <thead>
                 <tr>
                   <th>Day</th>
@@ -73,10 +85,10 @@
           </div>
         </section>
 
-        <section class="card table-wrap">
+        <section class="card table-wrap tips-sheet-surface">
           <h3>Employee Totals</h3>
           <div class="table-scroll">
-            <table class="tips-summary-table">
+            <table class="tips-summary-table tips-sheet-table">
               <thead>
                 <tr>
                   <th>Name</th>
