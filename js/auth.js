@@ -422,11 +422,22 @@
     const status = GPortal.qs("#loginStatus");
     const form = GPortal.qs("#loginForm");
     const email = GPortal.qs("#email");
+    const emailLabel = GPortal.qs("#loginIdentifierLabel");
+    const emailHint = GPortal.qs("#loginIdentifierHint");
     const password = GPortal.qs("#password");
     const googleLogin = GPortal.qs("#googleLogin");
     const appleLogin = GPortal.qs("#appleLogin");
     const submitBtn = GPortal.qs("#loginForm button[type=\"submit\"]");
     const tempAllowed = isTemporaryLoginAllowed();
+
+    if (emailLabel) {
+      emailLabel.textContent = tempAllowed ? "Email or Preview Username" : "Email";
+    }
+
+    if (emailHint) {
+      emailHint.hidden = !tempAllowed;
+      emailHint.textContent = tempAllowed ? "On localhost, preview logins are bear/1234 and admin/1234." : "";
+    }
 
     const existingSession = await GPortal.getSession();
     if (existingSession) {
@@ -525,6 +536,17 @@
 
       if (!form.checkValidity()) {
         GPortal.showNotice(status, "Enter a valid login and password.", "error");
+        return;
+      }
+
+      if (!loginValue.includes("@")) {
+        GPortal.showNotice(
+          status,
+          tempAllowed
+            ? "Use your full email address to sign in, or the localhost preview usernames bear/admin."
+            : "Use your full email address to sign in.",
+          "error"
+        );
         return;
       }
 

@@ -5676,6 +5676,16 @@
         return;
       }
       const target = event.target;
+      if (target && target.getAttribute("data-staff-add-field") === "name") {
+        addDraft.name = String(target.value || "").trim().slice(0, 80);
+        target.value = addDraft.name;
+        return;
+      }
+      if (target && target.getAttribute("data-staff-add-field") === "email") {
+        addDraft.email = normalizeStaffEmail(target.value);
+        target.value = addDraft.email;
+        return;
+      }
       if (target && target.getAttribute("data-staff-add-field") === "phone") {
         addDraft.phone = normalizeStaffPhone(target.value);
         target.value = addDraft.phone;

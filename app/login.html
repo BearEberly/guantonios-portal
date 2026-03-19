@@ -22,8 +22,9 @@
         <section class="card">
           <form id="loginForm" novalidate>
             <div class="form-row">
-              <label for="email">Email or Username</label>
-              <input id="email" type="text" autocomplete="username" required />
+              <label for="email" id="loginIdentifierLabel">Email</label>
+              <input id="email" type="text" inputmode="email" autocomplete="username" required />
+              <div id="loginIdentifierHint" class="small" hidden></div>
             </div>
 
             <div class="form-row">

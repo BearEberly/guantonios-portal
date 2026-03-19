@@ -59,15 +59,16 @@ test('staff directory powers tips roster', async ({ page }) => {
   await login(page, 'admin', '1234');
 
   await page.goto(base + '/app/staff.html', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#staffAddName')).toBeEnabled();
   await expect(page.locator('#staffRows')).not.toContainText('Loading...');
-  const beforeCount = await page.locator('#staffRows tr').count();
-  await page.fill('#staffAddName', smokeName);
-  await page.selectOption('#staffAddPosition', 'Server');
-  await page.click('#staffAddForm button[type="submit"]');
-  await expect(page.locator('#staffRows tr')).toHaveCount(beforeCount + 1);
-
-  await expect(page.locator('#staffRows')).toContainText(smokeName);
+  await page.click('#staffEditToggle');
+  await expect(page.locator('#staffEditToggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#staffAddNameInput')).toBeEnabled();
+  const beforeCount = await page.locator('#staffRows tr[data-staff-row]').count();
+  await page.fill('#staffAddNameInput', smokeName);
+  await page.selectOption('#staffAddPositionSelect', 'Server');
+  await page.click('button[data-staff-action="add"]');
+  await expect(page.locator('#staffRows tr[data-staff-row]')).toHaveCount(beforeCount + 1);
+  await expect(page.locator("input[data-staff-field='name']").last()).toHaveValue(smokeName);
 
   await page.goto(base + '/app/tips.html', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#tipsRosterRows')).toContainText(smokeName);
@@ -95,8 +96,10 @@ test('admin schedule save flow is stable', async ({ page }) => {
   const bearRow = page.locator('#scheduleGridRows tr', { hasText: 'Bear' }).first();
   await expect(bearRow).toBeVisible();
 
-  const firstCheck = bearRow.locator('input.schedule-grid-check').first();
-  await firstCheck.check({ force: true });
+  const firstSlot = bearRow.locator('button.schedule-slot-btn').first();
+  await firstSlot.click();
+  await page.locator('button[data-schedule-popover-preset]').first().click();
+  await expect(page.locator('#scheduleSaveBtn')).toBeVisible();
   await page.click('#scheduleSaveBtn');
 
   await expect(page.locator('#scheduleSavedFlash')).toHaveClass(/is-visible/);
