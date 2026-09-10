@@ -5,10 +5,8 @@
 - Demo hostname: `res.beareberly.com`
 - Cloudflare Pages project: `res-beareberly`
 - Git branch: `codex/reservation-pitch`
-- Commit: `f98cc8a9e6700074051cfd9b28be6bbf81b9b3b8`
 - Live Pages URL: `https://res-beareberly.pages.dev/`
-- Deployment URL: `https://83d65ea7.res-beareberly.pages.dev/`
-- GitHub Actions run: `https://github.com/BearEberly/guantonios-portal/actions/runs/34448742996`
+- GitHub Actions workflow: `https://github.com/BearEberly/guantonios-portal/actions/workflows/reservations-demo.yml`
 - Package root: `pitch/`
 - Supabase project: restaurant portal project `tcrbfctksulrwudfmxiv`
 - Database schema: private `reservation_demo`
