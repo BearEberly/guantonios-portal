@@ -45,6 +45,44 @@ Passing checks:
 - `docs/demo/evidence/screenshots/local-operator-ipad.png`
 - `docs/demo/evidence/screenshots/local-screenshots.json`
 
+## Operator access
+
+- Working operator URL: `https://res-beareberly.pages.dev/operator`
+- Final operator URL after DNS: `https://res.beareberly.com/operator`
+- Passcode source: `DEMO_OPERATOR_TOKEN` in trusted local `pitch/.dev.vars` and Cloudflare Pages production secrets. The passcode is not committed or printed in this report.
+- Reset: use the operator view `Reset demo data` button or `POST /api/demo/operator/reset` with the operator token.
+
+## Supabase isolation evidence
+
+- Demo data lives in private schema `reservation_demo` in project `tcrbfctksulrwudfmxiv`.
+- The migration creates demo-only tables for venue, tables, service days, holds, bookings, allocations, idempotency attempts, notification previews, and audit events.
+- Row level security is enabled on demo tables, and direct grants to `public`, `anon`, and `authenticated` are revoked.
+- Browser traffic reaches demo data only through Cloudflare Pages Functions calling narrow Supabase RPCs with a server-held demo secret.
+- Direct anonymous REST read against `reservation_demo.bookings` was rejected with HTTP `406` during local and live API regression.
+- The API regression proved wrong hold token rejection, idempotent hold retry, idempotent confirm retry, last-table concurrency, cancellation, and operator listing.
+
+## Visual comparison evidence
+
+- The homepage screenshots were compared against the current official Guantonio homepage reference captures.
+- Desktop homepage major bands align with the reference: header, reservation CTA, storefront hero, contact/map block, story block, and dark footer.
+- Mobile homepage uses the same order and artwork with compact spacing for phone review.
+- Reservation pages use a Resy-style booking panel and clearly label unknown checkout fields as proposed demo fields.
+
+## Five-minute pitch script
+
+See `pitch/docs/PITCH_SCRIPT.md`.
+
+## Real restaurant launch gap list
+
+Before this can replace Resy in production, the restaurant still needs:
+
+- Real venue schedule, table inventory, party-size rules, turn times, closures, and exceptions.
+- Staff authentication and role policy beyond the demo passcode.
+- Production guest data retention, privacy policy, audit review, and support workflow.
+- SMS provider setup, toll-free or local number registration, consent language, opt-out handling, and inbound cancellation rules.
+- Monitoring, alerting, backups, export, and operational runbook.
+- Controlled cutover plan so Resy and the replacement do not accept conflicting live reservations.
+
 ## Infrastructure status
 
 Completed:
