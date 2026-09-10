@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-09-10T07:09:20.010Z",
+  "evidence": [
+    {
+      "name": "local-home-1280",
+      "path": "/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "metrics": {
+        "title": "Guantonio's Reservation Demo",
+        "scrollWidth": 1280,
+        "bodyScrollWidth": 1280,
+        "clientWidth": 1280,
+        "initialStatus": null,
+        "textSample": "Synthetic reservation pitch demo. The homepage mirrors the public Guantonio site and replaces the Resy action with a demo booking flow.\n\nWELCOME\nMENU\nGIFT CARD\nFEATURES\nCART (0)\nReserve a table\nDEMO\nVisit Guantonio's\nContact\n\n(209) 263-7152\n\nguantonios@gmail.com\n\nOpen Hours\n\nTuesday - Thursday 5 pm - 8 pm\n\nFriday & Saturday 5 pm - 9 pm\n\nLocation\n\n600 West Lockeford Street\n\nLodi, Ca 95240\n\nGuantonios is a family owned and operated restaurant. We are focused on, and inspired by, the beauty that is Northern California agriculture. We have catered events all over Northern California for the past 1"
+      }
+    },
+    {
+      "name": "local-home-390",
+      "path": "/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "metrics": {
+        "title": "Guantonio's Reservation Demo",
+        "scrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "clientWidth": 390,
+        "initialStatus": null,
+        "textSample": "Synthetic reservation pitch demo. The homepage mirrors the public Guantonio site and replaces the Resy action with a demo booking flow.\n\nCART (0)\nMENU\nReserve a table\nDEMO\nVisit Guantonio's\nContact\n\n(209) 263-7152\n\nguantonios@gmail.com\n\nOpen Hours\n\nTuesday - Thursday 5 pm - 8 pm\n\nFriday & Saturday 5 pm - 9 pm\n\nLocation\n\n600 West Lockeford Street\n\nLodi, Ca 95240\n\nGuantonios is a family owned and operated restaurant. We are focused on, and inspired by, the beauty that is Northern California agriculture. We have catered events all over Northern California for the past 10 years and are excited to "
+      }
+    },
+    {
+      "name": "local-reservations-1280",
+      "path": "/reservations",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "metrics": {
+        "title": "Guantonio's Reservation Demo",
+        "scrollWidth": 1280,
+        "bodyScrollWidth": 1280,
+        "clientWidth": 1280,
+        "initialStatus": "Choose guests, date, and time to search synthetic demo availability.",
+        "textSample": "Guantonio's\n\nSYNTHETIC DEMO ONLY\n\nGuantonio's Wood Fired\n\nPizza · $ · Lodi · 4.9 demo rating\n\nGUESTS\n1 Guest\n2 Guests\n3 Guests\n4 Guests\n5 Guests\n6 Guests\n7 Guests\n8 Guests\nDATE\nTIME\n17:00\n17:30\n18:00\n18:30\n19:00\n19:30\n20:00\n20:30\nSEATING\nAny\nIndoor\nOutdoor\nSearch\nThu\n10\nFri\n11\nSat\n12\nSun\n13\nMon\n14\nTue\n15\nWed\n16\nThu\n17\nFri\n18\nSat\n19\n\nChoose guests, date, and time to search synthetic demo availability.\n\nNEED TO KNOW\n\nThis is a synthetic pitch demo using sample Guantonio-style hours and table capacity. It does not create or replace a real restaurant reservation.\n\nABOUT GUANTONIO'S WOOD FIRED\n\nFam"
+      }
+    },
+    {
+      "name": "local-reservations-390",
+      "path": "/reservations",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "metrics": {
+        "title": "Guantonio's Reservation Demo",
+        "scrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "clientWidth": 390,
+        "initialStatus": "Choose guests, date, and time to search synthetic demo availability.",
+        "textSample": "Guantonio's\n\nSYNTHETIC DEMO ONLY\n\nGuantonio's Wood Fired\n\nPizza · $ · Lodi · 4.9 demo rating\n\nGUESTS\n1 Guest\n2 Guests\n3 Guests\n4 Guests\n5 Guests\n6 Guests\n7 Guests\n8 Guests\nDATE\nTIME\n17:00\n17:30\n18:00\n18:30\n19:00\n19:30\n20:00\n20:30\nSEATING\nAny\nIndoor\nOutdoor\nSearch\nThu\n10\nFri\n11\nSat\n12\nSun\n13\nMon\n14\nTue\n15\nWed\n16\nThu\n17\nFri\n18\nSat\n19\n\nChoose guests, date, and time to search synthetic demo availability.\n\nNEED TO KNOW\n\nThis is a synthetic pitch demo using sample Guantonio-style hours and table capacity. It does not create or replace a real restaurant reservation.\n\nABOUT GUANTONIO'S WOOD FIRED\n\nFam"
+      }
+    },
+    {
+      "name": "local-manage-390",
+      "path": "/manage",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "metrics": {
+        "title": "Guantonio's Reservation Demo",
+        "scrollWidth": 390,
+        "bodyScrollWidth": 390,
+        "clientWidth": 390,
+        "initialStatus": null,
+        "textSample": "Back to reservations\nManage demo reservation\n\nThis route changes only synthetic pitch data.\n\nREFERENCE\nMANAGEMENT KEY\nLoad reservation\n\nEnter the demo reference and management key."
+      }
+    },
+    {
+      "name": "local-operator-ipad",
+      "path": "/operator",
+      "viewport": {
+        "width": 1194,
+        "height": 834
+      },
+      "metrics": {
+        "title": "Guantonio's Reservation Demo",
+        "scrollWidth": 1194,
+        "bodyScrollWidth": 1194,
+        "clientWidth": 1194,
+        "initialStatus": null,
+        "textSample": "IPAD OPERATOR DEMO\n\nTonight's demo service\n\nProtected view for check-in, seating rehearsal, cancellation, and unsent notification preview.\n\nOPERATOR PASSCODE\nOpen operator view\n\nOperator view loaded from Supabase demo data.\n\nRESERVATIONS\nReset demo data\n\nNo synthetic bookings yet.\n\nFLOOR SNAPSHOT\n12\n14\n21\n22\n31\nP1\nP2\nP3\nRECENT HOLDS\nDISABLED NOTIFICATION ADAPTER\n\nNo previews yet."
+      }
+    }
+  ]
+}

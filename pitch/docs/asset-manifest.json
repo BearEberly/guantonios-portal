@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-09-10T06:09:41.585891+00:00",
+  "assets": [
+    {
+      "file": "public/assets/g-mark.jpg",
+      "source_url": "https://images.squarespace-cdn.com/content/v1/5af4d9b93917ee7619632fbb/1592251787632-9TN5BUONGX5NLAKMZ3I4/JustG.jpg?format=1000w",
+      "sha256": "7466e7e258793a94df7a29f82d89628d34687811094bebf62e4c9dd92dfea033",
+      "bytes": 80304,
+      "content_type": "image/webp"
+    },
+    {
+      "path": "public/assets/official-logo-clean.png",
+      "sha256_16": "22487e4d9f90335e",
+      "bytes": 91539,
+      "source": "derived from official downloaded asset",
+      "note": "Transparent-background derivative of the official homepage logo asset for visual parity on white."
+    },
+    {
+      "path": "public/assets/storefront-crop.png",
+      "sha256_16": "194c0be692ffa217",
+      "bytes": 535067,
+      "source": "derived from official downloaded asset",
+      "note": "Alpha-cropped derivative of the official storefront illustration to match the public homepage hero sizing."
+    }
+  ]
+}

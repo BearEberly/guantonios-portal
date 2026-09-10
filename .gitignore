@@ -4,3 +4,11 @@ node_modules/
 test-results/
 playwright-report/
 .DS_Store
+dist/
+
+# Guantonio reservation pitch local secrets
+pitch/.dev.vars
+pitch/.env
+pitch/.env.*
+pitch/dist/
+!pitch/.dev.vars.example

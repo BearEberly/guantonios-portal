@@ -1,0 +1,5 @@
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=replace_with_project_publishable_key
+DEMO_API_SECRET=replace_with_generated_demo_api_secret
+DEMO_OPERATOR_TOKEN=replace_with_generated_operator_passcode_or_token
+DEMO_MODE=true
