@@ -15,3 +15,7 @@ The earlier objective file named `res.gtonecrew.com`. The user later changed dir
 ## SMS boundary
 
 SMS remains disabled and deferred. The pitch includes only a disabled notification adapter and unsent preview events.
+
+## September 10, 2026 deployment update
+
+The separate Cloudflare Pages project `res-beareberly` is live at `https://res-beareberly.pages.dev/` from GitHub Actions run `34448742996`. The custom domain `res.beareberly.com` is attached in Pages but waiting on the DNS CNAME record to `res-beareberly.pages.dev`. The available Cloudflare token cannot create DNS records; Cloudflare returns authentication error `10000` for DNS operations.

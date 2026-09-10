@@ -5,6 +5,10 @@
 - Demo hostname: `res.beareberly.com`
 - Cloudflare Pages project: `res-beareberly`
 - Git branch: `codex/reservation-pitch`
+- Commit: `f98cc8a9e6700074051cfd9b28be6bbf81b9b3b8`
+- Live Pages URL: `https://res-beareberly.pages.dev/`
+- Deployment URL: `https://83d65ea7.res-beareberly.pages.dev/`
+- GitHub Actions run: `https://github.com/BearEberly/guantonios-portal/actions/runs/34448742996`
 - Package root: `pitch/`
 - Supabase project: restaurant portal project `tcrbfctksulrwudfmxiv`
 - Database schema: private `reservation_demo`
@@ -48,14 +52,18 @@ Passing checks:
 Completed:
 
 - Created separate Cloudflare Pages project `res-beareberly`.
+- Published the demo through GitHub Actions to `https://res-beareberly.pages.dev/`.
 - Set production runtime secrets in Cloudflare Pages.
 - Added GitHub Actions deployment workflow.
 - Added GitHub repository secrets needed by the workflow.
-- Excluded branch `codex/reservation-pitch` from the existing `guantonios-portal` Pages preview deployments so this branch does not publish under the employee project.
+- Excluded branch `codex/reservation-pitch` and `codex/*` from the existing `guantonios-portal` Pages preview deployments so this branch does not publish under the employee project.
+- Deleted the stray `guantonios-portal` preview deployment created during the first push; verified it did not contain the reservation demo.
+- Attached custom domain `res.beareberly.com` to the `res-beareberly` Pages project.
 
 Remaining before public handoff:
 
-- Push branch `codex/reservation-pitch`.
-- Verify GitHub Actions deployment completes.
-- Attach `res.beareberly.com` to the `res-beareberly` Pages project.
-- Verify DNS and HTTPS on the final hostname.
+- Create DNS record: `res.beareberly.com` CNAME to `res-beareberly.pages.dev`, preferably proxied in Cloudflare.
+- Refresh the `res.beareberly.com` Pages custom domain after DNS exists. Current status is pending with `CNAME record not set`.
+- Verify HTTPS and the full booking workflow on `https://res.beareberly.com/`.
+
+The current Cloudflare token has Pages write access but DNS record operations return Cloudflare authentication error `10000`. The Mac was locked during dashboard fallback, so the DNS record could not be added through the Cloudflare UI in this run.
