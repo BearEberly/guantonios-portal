@@ -42,8 +42,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Configure Cloudflare Wrangler OAuth
+        run: |
+          mkdir -p "$HOME/.wrangler/config" "$HOME/.config/.wrangler/config"
+          printf '%s' "$CLOUDFLARE_WRANGLER_CONFIG" > "$HOME/.wrangler/config/default.toml"
+          printf '%s' "$CLOUDFLARE_WRANGLER_CONFIG" > "$HOME/.config/.wrangler/config/default.toml"
+        env:
+          CLOUDFLARE_WRANGLER_CONFIG: ${{ secrets.CLOUDFLARE_WRANGLER_CONFIG }}
+
       - name: Deploy to Cloudflare Pages
         run: npm exec --yes wrangler@latest -- pages deploy dist --project-name res-beareberly --branch codex/reservation-pitch --commit-hash "$GITHUB_SHA"
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

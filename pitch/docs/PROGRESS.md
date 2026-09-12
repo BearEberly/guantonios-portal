@@ -24,4 +24,4 @@ The separate Cloudflare Pages project `res-beareberly` is live at `https://res-b
 
 The final demo hostname `https://res.beareberly.com/` is live. Cloudflare DNS now has a proxied CNAME record `res.beareberly.com` to `res-beareberly.pages.dev`, and the `res-beareberly` Pages custom-domain panel shows `res.beareberly.com` as Active with SSL enabled.
 
-Final custom-domain validation passed on `https://res.beareberly.com`: the demo health endpoint returned release `6f145a3a1b5a95c87c4e1e1389b63447327b38c7`, the API regression passed, and the Playwright browser suite passed 15 tests across desktop, iPad sized Chromium, and mobile Chromium.
+Final custom-domain validation passed on `https://res.beareberly.com`: the demo health endpoint returned the deployed Git release, the API regression passed, and the Playwright browser suite passed 15 tests across desktop, iPad sized Chromium, and mobile Chromium. Record the exact current release from `/api/demo/health` during final handoff.

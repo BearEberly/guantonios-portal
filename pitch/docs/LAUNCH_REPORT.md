@@ -41,7 +41,7 @@ Passing checks on `https://res.beareberly.com`:
 
 - DNS: proxied CNAME `res.beareberly.com` to `res-beareberly.pages.dev`; public DNS returns Cloudflare A and AAAA records.
 - Cloudflare Pages custom domain: dashboard shows `res.beareberly.com` as Active with SSL enabled.
-- Health endpoint: `GET /api/demo/health` returned HTTP 200 with release `6f145a3a1b5a95c87c4e1e1389b63447327b38c7`, `demo: true`, `smsEnabled: false`, and backend `ready`.
+- Health endpoint: `GET /api/demo/health` returned HTTP 200 with the deployed Git release, `demo: true`, `smsEnabled: false`, and backend `ready`. Record the exact current release from that endpoint during final handoff.
 - API regression: reset, availability search, hold retry, confirm retry, view, change, cancel, operator list, last-table concurrency, and blocked direct private schema read all passed.
 - Browser suite: `PLAYWRIGHT_BASE_URL=https://res.beareberly.com node node_modules/@playwright/test/cli.js test` passed 15 tests across desktop, iPad sized Chromium, and mobile Chromium.
 
