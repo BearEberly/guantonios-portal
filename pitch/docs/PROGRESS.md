@@ -25,3 +25,11 @@ The separate Cloudflare Pages project `res-beareberly` is live at `https://res-b
 The final demo hostname `https://res.beareberly.com/` is live. Cloudflare DNS now has a proxied CNAME record `res.beareberly.com` to `res-beareberly.pages.dev`, and the `res-beareberly` Pages custom-domain panel shows `res.beareberly.com` as Active with SSL enabled.
 
 Final custom-domain validation passed on `https://res.beareberly.com`: the demo health endpoint returned the deployed Git release, the API regression passed, and the Playwright browser suite passed 15 tests across desktop, iPad sized Chromium, and mobile Chromium. Record the exact current release from `/api/demo/health` during final handoff.
+
+## September 12, 2026 Resy-style interface refresh
+
+The customer reservation page was refreshed toward the requested Resy-style experience while keeping Guantonio branding and demo safety copy. The page now uses a sticky reservation header, grouped guest/date/time/seating search controls, venue tabs, circular date rail, time and seating tiles, and a right-side venue/location/operator rail.
+
+The protected operator route was refreshed toward an iPad service-console model. It now presents service counts, a reservation queue, check-in and seating actions, a floor snapshot, recent holds, and the disabled notification adapter preview.
+
+Local validation passed before deployment: production build, Vitest API wrapper tests, rendered desktop/iPad/mobile checks with no console errors or horizontal overflow, and local Playwright smoke/accessibility tests for public pages and the operator passcode shell. Full transactional booking verification is performed against the deployed Cloudflare Pages functions.

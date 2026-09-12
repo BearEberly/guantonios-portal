@@ -165,13 +165,35 @@ function ReservationsPage() {
 
   return (
     <main className="booking-page">
-      <a className="back-home" href="/">Guantonio's</a>
+      <header className="booking-topbar" aria-label="Reservation demo header">
+        <a className="brand-mark" href="/" aria-label="Return to Guantonio homepage">Guantonio's</a>
+        <nav className="booking-nav" aria-label="Reservation sections">
+          <a href="#availability">Book</a>
+          <a href="#details">Details</a>
+          <a href="/manage">Manage</a>
+        </nav>
+        <a className="operator-link" href="/operator">iPad operator</a>
+      </header>
+      <section className="booking-hero" aria-labelledby="reservation-title">
+        <div className="hero-copy">
+          <p className="demo-tag">Synthetic demo only</p>
+          <h1 id="reservation-title">Guantonio's Wood Fired</h1>
+          <p className="venue-meta">Pizza · $ · Lodi · 600 W Lockeford St</p>
+          <div className="venue-actions" aria-label="Venue quick facts">
+            <span>4.9 demo rating</span>
+            <span>Indoor and outdoor seating</span>
+            <span>Tuesday through Saturday dinner</span>
+          </div>
+        </div>
+        <div className="hero-card" aria-label="Selected search summary">
+          <span>Searching for</span>
+          <strong>{partySize} {partySize === 1 ? 'guest' : 'guests'} at {time}</strong>
+          <p>{new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+        </div>
+      </section>
       <section className="booking-shell">
         <div className="booking-main">
-          <p className="demo-tag">Synthetic demo only</p>
-          <h1>Guantonio's Wood Fired</h1>
-          <p className="venue-meta">Pizza · $ · Lodi · 4.9 demo rating</p>
-          <form className="search-card" onSubmit={runSearch} aria-label="Search demo reservations">
+          <form id="availability" className="search-card" onSubmit={runSearch} aria-label="Search demo reservations">
             <label>
               <span>Guests</span>
               <select value={partySize} onChange={event => setPartySize(Number(event.target.value))}>
@@ -198,6 +220,11 @@ function ReservationsPage() {
             </label>
             <button type="submit" disabled={busy}>{busy ? 'Searching...' : 'Search'}</button>
           </form>
+          <div className="booking-tabs" aria-label="Venue navigation">
+            <a href="#availability" aria-current="page">Reservations</a>
+            <a href="#details">Need to Know</a>
+            <a href="#location">Location</a>
+          </div>
           <div className="date-ribbon" aria-label="Quick dates">
             {dates.map(d => (
               <button key={d} className={d === date ? 'active' : ''} onClick={() => setDate(d)} type="button">
@@ -210,14 +237,15 @@ function ReservationsPage() {
           <section className="slot-list" aria-label="Available demo times">
             {slots.map(slot => (
               <article className="slot-card" key={slot.slotId}>
-                <div>
+                <div className="slot-time">
                   <strong>{slot.displayTime}</strong>
                   <span>{slot.exact ? 'Matches your search' : 'Nearby demo availability'}</span>
                 </div>
                 <div className="seat-options">
                   {slot.seating.map(seat => (
-                    <button key={`${slot.slotId}-${seat.section}`} type="button" onClick={() => startHold(slot, seat.section)} disabled={busy}>
-                      {seat.label}
+                    <button key={`${slot.slotId}-${seat.section}`} aria-label={seat.label} type="button" onClick={() => startHold(slot, seat.section)} disabled={busy}>
+                      <span>{seat.label}</span>
+                      <small>{seat.section === 'indoor' ? 'Dining room' : 'Patio'}</small>
                     </button>
                   ))}
                 </div>
@@ -249,7 +277,7 @@ function ReservationsPage() {
           {confirmed?.reference && (
             <Confirmation result={confirmed} />
           )}
-          <section className="info-sections">
+          <section id="details" className="info-sections">
             <div>
               <h2>Need to Know</h2>
               <p>This is a synthetic pitch demo using sample Guantonio-style hours and table capacity. It does not create or replace a real restaurant reservation.</p>
@@ -261,9 +289,19 @@ function ReservationsPage() {
           </section>
         </div>
         <aside className="booking-aside" aria-label="Venue media and location">
-          <img src="/assets/storefront-crop.png" alt="Guantonio storefront illustration" />
-          <div className="aside-map">600 W Lockeford St<br />Lodi, CA 95240</div>
-          <a href="/operator">Protected demo operator view</a>
+          <div className="aside-photo">
+            <img src="/assets/storefront-crop.png" alt="Guantonio storefront illustration" />
+            <span>Guantonio's Wood Fired</span>
+          </div>
+          <div id="location" className="aside-map">
+            <strong>600 W Lockeford St</strong>
+            <span>Lodi, CA 95240</span>
+          </div>
+          <div className="aside-panel">
+            <h2>Demo operations</h2>
+            <p>Employees use the protected iPad view to check in, seat, finish, cancel, and reset synthetic bookings.</p>
+            <a href="/operator">Protected demo operator view</a>
+          </div>
         </aside>
       </section>
     </main>
@@ -422,11 +460,17 @@ function OperatorPage() {
     }
   }
 
+  const bookings = state?.bookings || [];
+  const activeCount = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status)).length;
+  const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
+  const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
+  const previewCount = state?.notifications.length || 0;
+
   return (
     <main className="operator-page">
       <section className="operator-login">
         <div>
-          <p className="demo-tag">iPad operator demo</p>
+          <p className="demo-tag operator-demo-tag">iPad operator demo</p>
           <h1>Tonight's demo service</h1>
           <p>Protected view for check-in, seating rehearsal, cancellation, and unsent notification preview.</p>
         </div>
@@ -437,40 +481,61 @@ function OperatorPage() {
       </section>
       <p className="operator-status" role="status">{status}</p>
       {state && (
-        <section className="operator-grid">
-          <div className="operator-list">
-            <div className="section-heading">
-              <h2>Reservations</h2>
-              <button type="button" onClick={resetDemo}>Reset demo data</button>
-            </div>
-            {state.bookings.length === 0 && <p>No synthetic bookings yet.</p>}
-            {state.bookings.map(booking => (
-              <article key={booking.reference} className={`operator-row ${booking.status}`}>
+        <>
+          <section className="service-strip" aria-label="Service summary">
+            <article><span>Covers active</span><strong>{activeCount}</strong></article>
+            <article><span>Checked in</span><strong>{checkInCount}</strong></article>
+            <article><span>Seated</span><strong>{seatedCount}</strong></article>
+            <article><span>Text previews</span><strong>{previewCount}</strong></article>
+          </section>
+          <section className="operator-grid">
+            <div className="operator-list">
+              <div className="section-heading">
                 <div>
-                  <strong>{booking.reference}</strong>
-                  <span>{formatLocalTime(booking.startsAt)} · {booking.partySize} · {booking.section} · table {booking.tableCode || 'pending'}</span>
+                  <h2>Reservations</h2>
+                  <p>Live synthetic book, change, cancel, and check-in queue.</p>
                 </div>
-                <span className="status-pill">{statusLabel(booking.status)}</span>
-                <div className="operator-actions">
-                  <button onClick={() => setBookingStatus(booking.reference, 'checked_in')}>Check in</button>
-                  <button onClick={() => setBookingStatus(booking.reference, 'seated')}>Seat</button>
-                  <button onClick={() => setBookingStatus(booking.reference, 'completed')}>Finish</button>
-                  <button onClick={() => setBookingStatus(booking.reference, 'cancelled')}>Cancel</button>
-                </div>
-              </article>
-            ))}
-          </div>
-          <aside className="floor-panel">
-            <h2>Floor snapshot</h2>
-            <div className="floor-map" aria-label="Synthetic floor map">
-              {['12','14','21','22','31','P1','P2','P3'].map(code => <span key={code}>{code}</span>)}
+                <button type="button" onClick={resetDemo} disabled={busy}>Reset demo data</button>
+              </div>
+              {bookings.length === 0 && <p>No synthetic bookings yet.</p>}
+              {bookings.map(booking => (
+                <article key={booking.reference} className={`operator-row ${booking.status}`}>
+                  <div className="operator-guest">
+                    <strong>{booking.guestLabel || 'Demo Guest'}</strong>
+                    <span>{booking.reference}</span>
+                  </div>
+                  <div className="operator-time">
+                    <strong>{formatLocalTime(booking.startsAt)}</strong>
+                    <span>{booking.partySize} guests · {booking.section} · table {booking.tableCode || 'pending'}</span>
+                  </div>
+                  <span className="status-pill">{statusLabel(booking.status)}</span>
+                  <div className="operator-actions">
+                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'checked_in')}>Check in</button>
+                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'seated')}>Seat</button>
+                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'completed')}>Finish</button>
+                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'cancelled')}>Cancel</button>
+                  </div>
+                </article>
+              ))}
             </div>
-            <h2>Recent holds</h2>
-            {state.holds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
-            <h2>Disabled notification adapter</h2>
-            {state.notifications.length === 0 ? <p>No previews yet.</p> : state.notifications.slice(0, 3).map((n, i) => <p key={`${n.createdAt}-${i}`}>{n.eventType}: {n.status}</p>)}
-          </aside>
-        </section>
+            <aside className="floor-panel">
+              <section aria-labelledby="floor-title">
+                <h2 id="floor-title">Floor snapshot</h2>
+                <div className="floor-map" aria-label="Synthetic floor map">
+                  {['12','14','21','22','31','P1','P2','P3'].map((code, index) => <span key={code} className={index < activeCount ? 'occupied' : ''}>{code}</span>)}
+                </div>
+              </section>
+              <section aria-labelledby="holds-title">
+                <h2 id="holds-title">Recent holds</h2>
+                {state.holds.length === 0 ? <p>No open demo holds.</p> : state.holds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
+              </section>
+              <section aria-labelledby="notifications-title">
+                <h2 id="notifications-title">Disabled notification adapter</h2>
+                {state.notifications.length === 0 ? <p>No previews yet.</p> : state.notifications.slice(0, 3).map((n, i) => <p key={`${n.createdAt}-${i}`}>{n.eventType}: {n.status}</p>)}
+              </section>
+            </aside>
+          </section>
+        </>
       )}
     </main>
   );
