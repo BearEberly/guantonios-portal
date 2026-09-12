@@ -33,3 +33,9 @@ The customer reservation page was refreshed toward the requested Resy-style expe
 The protected operator route was refreshed toward an iPad service-console model. It now presents service counts, a reservation queue, check-in and seating actions, a floor snapshot, recent holds, and the disabled notification adapter preview.
 
 Local validation passed before deployment: production build, Vitest API wrapper tests, rendered desktop/iPad/mobile checks with no console errors or horizontal overflow, and local Playwright smoke/accessibility tests for public pages and the operator passcode shell. Full transactional booking verification is performed against the deployed Cloudflare Pages functions. A live-console CSP correction also allows Cloudflare Insights hosts so Cloudflare Pages analytics injection does not produce browser console errors.
+
+## September 12, 2026 Cloudflare deploy token repair
+
+The GitHub Actions deployment failure was fixed by replacing the invalid `CLOUDFLARE_API_TOKEN` secret with a new Cloudflare user API token scoped to `Seberly@gmail.com's Account` with `Cloudflare Pages:Edit`. The workflow now passes `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` directly to Wrangler instead of relying on the prior OAuth-style Wrangler config secret.
+
+The repaired workflow rerun succeeded and deployed release `c8da9db25aa15d62bb3025e1be0e13eecb9c3d0c` to `https://res.beareberly.com/`. Final verification passed: health endpoint returned the final release, API regression passed, Playwright passed 15 production browser tests across desktop, iPad, and mobile, demo data was reset, and the Cloudflare Insights CSP console error was gone on the live reservation page.
