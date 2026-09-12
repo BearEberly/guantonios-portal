@@ -18,4 +18,10 @@ SMS remains disabled and deferred. The pitch includes only a disabled notificati
 
 ## September 10, 2026 deployment update
 
-The separate Cloudflare Pages project `res-beareberly` is live at `https://res-beareberly.pages.dev/` from the GitHub Actions workflow. The custom domain `res.beareberly.com` is attached in Pages but waiting on the DNS CNAME record to `res-beareberly.pages.dev`. The available Cloudflare token cannot create DNS records; Cloudflare returns authentication error `10000` for DNS operations.
+The separate Cloudflare Pages project `res-beareberly` is live at `https://res-beareberly.pages.dev/` from the GitHub Actions workflow. The available Cloudflare token could manage Pages but could not create DNS records, so the DNS record required dashboard access.
+
+## September 12, 2026 custom-domain update
+
+The final demo hostname `https://res.beareberly.com/` is live. Cloudflare DNS now has a proxied CNAME record `res.beareberly.com` to `res-beareberly.pages.dev`, and the `res-beareberly` Pages custom-domain panel shows `res.beareberly.com` as Active with SSL enabled.
+
+Final custom-domain validation passed on `https://res.beareberly.com`: the demo health endpoint returned release `6f145a3a1b5a95c87c4e1e1389b63447327b38c7`, the API regression passed, and the Playwright browser suite passed 15 tests across desktop, iPad sized Chromium, and mobile Chromium.

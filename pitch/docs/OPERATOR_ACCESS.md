@@ -2,13 +2,13 @@
 
 The operator demo lives at `/operator` on the deployed reservation demo site.
 
-Current working URL:
-
-- `https://res-beareberly.pages.dev/operator`
-
-Final target URL after DNS is complete:
+Current operator URL:
 
 - `https://res.beareberly.com/operator`
+
+Pages fallback URL:
+
+- `https://res-beareberly.pages.dev/operator`
 
 ## Passcode source
 
