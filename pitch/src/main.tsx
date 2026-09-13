@@ -4,6 +4,7 @@ import { cancelReservation, changeReservation, confirmReservation, createHold, o
 import type { AvailabilitySlot, HoldResult, OperatorState, ReservationSummary, SeatingSection } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
+import { SmsInfoPage } from './sms-info';
 
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
@@ -11,6 +12,7 @@ function App() {
   if (path === '/reservations') return <ReservationsPage />;
   if (path === '/manage') return <ManagePage />;
   if (path === '/operator') return <OperatorPage />;
+  if (path === '/sms' || path === '/sms/privacy' || path === '/sms/terms') return <SmsInfoPage path={path} />;
   return <NotFound />;
 }
 
@@ -281,6 +283,7 @@ function ReservationsPage() {
             <div>
               <h2>Need to Know</h2>
               <p>This is a synthetic pitch demo using sample Guantonio-style hours and table capacity. It does not create or replace a real restaurant reservation.</p>
+              <p><a href="/sms">SMS demo information, consent, and privacy</a></p>
             </div>
             <div>
               <h2>About Guantonio's Wood Fired</h2>

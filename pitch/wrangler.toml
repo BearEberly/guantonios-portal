@@ -2,3 +2,12 @@ name = "res-beareberly"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-09-10"
 compatibility_flags = ["nodejs_compat"]
+
+# Controlled inbound demo. Enable only after carrier approval and live validation.
+[vars]
+SMS_MODE = "disabled"
+SMS_CARRIER_APPROVED = "false"
+SMS_PUBLIC_ORIGIN = "https://res.beareberly.com"
+TWILIO_PHONE_NUMBER = "+12097094194"
+SMS_AI_MODEL = "gpt-4.1-mini"
+SMS_AI_REHEARSAL_ENABLED = "false"
