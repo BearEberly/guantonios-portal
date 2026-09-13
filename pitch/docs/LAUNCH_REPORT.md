@@ -110,4 +110,4 @@ Completed:
 - Triggered Cloudflare Pages DNS recheck and verified the custom domain is Active with SSL enabled.
 - Verified HTTPS and the full booking workflow on `https://res.beareberly.com/`.
 
-No public handoff blockers remain for the demo. The current GitHub Actions deployment path works, but the saved Cloudflare credential used by the workflow is an OAuth-style token and should be replaced with a scoped long-lived Cloudflare API token before relying on unattended CI for future production operations.
+The website demo is live. On September 12, the GitHub Actions deployment credential was replaced with a Cloudflare API token scoped to the expected account with Pages:Edit permission, and subsequent deployments succeeded. Local Wrangler OAuth is separate from this working CI credential. SMS activation remains incomplete; current provider setup and verification evidence is recorded in `pitch/docs/PROGRESS.md`.

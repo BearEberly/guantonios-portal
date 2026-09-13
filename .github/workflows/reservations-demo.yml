@@ -8,6 +8,12 @@ on:
       - .github/workflows/reservations-demo.yml
       - pitch/**
   workflow_dispatch:
+    inputs:
+      configure_sms_secrets:
+        description: Install the prepared AI key and approved tester allowlist on the demo service
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: reservations-demo-${{ github.ref }}
@@ -42,8 +48,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Configure demo AI and tester secrets
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.configure_sms_secrets }}
+        run: |
+          test -n "$RESERVATION_SETUP_OPENAI_API_KEY"
+          test -n "$RESERVATION_SETUP_SMS_TEST_ALLOWLIST"
+          printf '%s' "$RESERVATION_SETUP_OPENAI_API_KEY" | npm exec --yes wrangler@4.131.1 -- pages secret put OPENAI_API_KEY --project-name res-beareberly
+          printf '%s' "$RESERVATION_SETUP_SMS_TEST_ALLOWLIST" | npm exec --yes wrangler@4.131.1 -- pages secret put SMS_TEST_ALLOWLIST --project-name res-beareberly
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RESERVATION_SETUP_OPENAI_API_KEY: ${{ secrets.RESERVATION_SETUP_OPENAI_API_KEY }}
+          RESERVATION_SETUP_SMS_TEST_ALLOWLIST: ${{ secrets.RESERVATION_SETUP_SMS_TEST_ALLOWLIST }}
+
       - name: Deploy to Cloudflare Pages
-        run: npm exec --yes wrangler@latest -- pages deploy dist --project-name res-beareberly --branch codex/reservation-pitch --commit-hash "$GITHUB_SHA"
+        run: npm exec --yes wrangler@4.131.1 -- pages deploy dist --project-name res-beareberly --branch codex/reservation-pitch --commit-hash "$GITHUB_SHA"
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
