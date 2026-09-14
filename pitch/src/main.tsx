@@ -532,6 +532,12 @@ function serviceStageCopy(stage?: string | null) {
   return SERVICE_STAGE_OPTIONS.find(option => option.value === stage)?.nextCopy || 'Order has not been started.';
 }
 
+function nextServiceStage(stage?: string | null): ServiceStage | null {
+  const currentIndex = Math.max(0, SERVICE_STAGE_OPTIONS.findIndex(option => option.value === stage));
+  const next = SERVICE_STAGE_OPTIONS[currentIndex + 1];
+  return next?.value || null;
+}
+
 function turnRiskForBooking(booking?: ReservationSummary | null): TurnRisk {
   if (!booking || booking.status !== 'seated') return 'not_seated';
   if (booking.turnRisk && booking.turnRisk !== 'not_seated') return booking.turnRisk;
@@ -1138,18 +1144,35 @@ function OperatorPage() {
   const selectedTurnMinutes = selectedBooking ? Math.round(Math.max(0, new Date(selectedBooking.endsAt).getTime() - new Date(selectedBooking.startsAt).getTime()) / 60000) : 0;
   const selectedTableBlock = selectedTableCodes.map(code => tableBlocksByTable.get(code)).find(Boolean);
   const selectedServiceStage = selectedBooking?.serviceStage || 'not_started';
+  const selectedNextServiceStage = selectedBooking?.status === 'seated' ? nextServiceStage(selectedServiceStage) : null;
   const selectedTurnRisk = turnRiskForBooking(selectedBooking);
   const selectedArrivalState = arrivalStateForBooking(selectedBooking, operatorNowMs);
   const selectedServiceAction = selectedBooking ? (
     selectedBooking.status === 'confirmed'
       ? { label: 'Next: check in', detail: 'Greet the party, confirm guest notes, then check in before seating.' }
       : selectedBooking.status === 'checked_in'
-        ? { label: 'Next: seat party', detail: selectedTableCodes.length ? `Seat at ${selectedDisplayTable} or move to another open table.` : 'Tap an open compatible table from the floor map.' }
+        ? { label: 'Next: seat from floor', detail: selectedTableCodes.length ? `Confirm table ${selectedDisplayTable} or move to another open table.` : 'Tap an open compatible table from the floor map.' }
         : selectedBooking.status === 'seated'
-          ? { label: serviceStageLabel(selectedServiceStage), detail: `${turnRiskLabel(selectedTurnRisk)}. ${serviceStageCopy(selectedServiceStage)}` }
+          ? selectedNextServiceStage
+            ? { label: `Next: ${serviceStageLabel(selectedNextServiceStage)}`, detail: `${turnRiskLabel(selectedTurnRisk)}. ${serviceStageCopy(selectedServiceStage)}` }
+            : { label: 'Next: finish table', detail: `${turnRiskLabel(selectedTurnRisk)}. Payment is complete and the table can be closed.` }
           : selectedBooking.status === 'completed'
             ? { label: 'Turn complete', detail: 'Table is closed out for this synthetic service.' }
             : { label: 'No active action', detail: 'This party is cancelled or inactive.' }
+  ) : null;
+  const selectedLifecycleClosed = selectedBooking ? ['cancelled', 'completed'].includes(selectedBooking.status) : true;
+  const selectedCanCheckIn = Boolean(selectedBooking && selectedBooking.status === 'confirmed');
+  const selectedCanSeatFromFloor = Boolean(selectedBooking && ['confirmed', 'checked_in'].includes(selectedBooking.status));
+  const selectedCanFinish = Boolean(selectedBooking && ['checked_in', 'seated'].includes(selectedBooking.status));
+  const selectedCanCancel = Boolean(selectedBooking && !selectedLifecycleClosed);
+  const selectedCommandState = selectedBooking ? (
+    selectedBooking.status === 'confirmed'
+      ? { label: 'Arrival', value: selectedArrivalState.label }
+      : selectedBooking.status === 'checked_in'
+        ? { label: 'Floor', value: selectedDisplayTable === 'pending' ? 'Pick table' : selectedDisplayTable }
+        : selectedBooking.status === 'seated'
+          ? { label: 'Stage', value: serviceStageLabel(selectedServiceStage) }
+          : { label: 'State', value: statusLabel(selectedBooking.status) }
   ) : null;
   const selectedPreferenceTags = selectedBookingProfile?.preferences?.length ? selectedBookingProfile.preferences : selectedBooking?.guestPreferences || [];
   const selectedProfileTags = selectedBookingProfile?.tags?.length ? selectedBookingProfile.tags : selectedBooking?.guestTags || [];
@@ -2638,6 +2661,47 @@ function OperatorPage() {
                     <span className={`arrival-chip arrival-${selectedArrivalState.key}`}>{selectedArrivalState.label}</span>
                     {selectedBooking.operatorNote && <span>Host note</span>}
                   </div>
+                  <section className="host-command-card" aria-label="Host command center">
+                    <div className="host-command-head">
+                      <div>
+                        <span>Host command</span>
+                        <strong>{selectedServiceAction?.label}</strong>
+                        <p>{selectedServiceAction?.detail}</p>
+                      </div>
+                      {selectedCommandState && (
+                        <dl>
+                          <dt>{selectedCommandState.label}</dt>
+                          <dd>{selectedCommandState.value}</dd>
+                        </dl>
+                      )}
+                    </div>
+                    <div className="host-command-primary">
+                      {selectedBooking.status === 'confirmed' && (
+                        <button type="button" disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
+                      )}
+                      {selectedBooking.status === 'checked_in' && (
+                        <button type="button" disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>Seat from floor</button>
+                      )}
+                      {selectedBooking.status === 'seated' && selectedNextServiceStage && (
+                        <button type="button" disabled={busy || serviceBusy} onClick={() => updateServiceStage(selectedBooking.reference, selectedNextServiceStage)}>Mark {serviceStageLabel(selectedNextServiceStage)}</button>
+                      )}
+                      {selectedBooking.status === 'seated' && !selectedNextServiceStage && (
+                        <button type="button" disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish table</button>
+                      )}
+                      {selectedLifecycleClosed && (
+                        <button type="button" disabled>{statusLabel(selectedBooking.status)}</button>
+                      )}
+                    </div>
+                    <div className="host-command-actions">
+                      <button type="button" disabled={busy || !selectedCanCheckIn} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
+                      <button type="button" disabled={busy || !selectedCanSeatFromFloor || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>Seat</button>
+                      <button type="button" disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move'}</button>
+                      <button type="button" disabled={busy || !selectedCanFinish} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish</button>
+                      <button type="button" className="danger" disabled={busy || !selectedCanCancel} onClick={() => setBookingStatus(selectedBooking.reference, 'cancelled')}>Cancel</button>
+                      <button type="button" disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Profile</button>
+                    </div>
+                    {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
+                  </section>
                   <form className="reservation-detail-editor" aria-label="Reservation detail editor" onSubmit={saveReservationDetail}>
                     <div>
                       <span>Reservation details</span>
@@ -2723,12 +2787,13 @@ function OperatorPage() {
                     {selectedBooking.status !== 'seated' && <p className="move-hint">Seat the party before updating service stage.</p>}
                   </div>
                   <div className="side-actions">
-                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
-                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
+                    <button disabled={busy || !selectedCanCheckIn} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
+                    <button disabled={busy || !selectedCanSeatFromFloor || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>Seat from floor</button>
                     <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
+                    <button disabled={busy || !selectedCanFinish} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish</button>
+                    <button className="danger" disabled={busy || !selectedCanCancel} onClick={() => setBookingStatus(selectedBooking.reference, 'cancelled')}>Cancel</button>
                     <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
                   </div>
-                  {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
                 </section>
               )}
               <section aria-labelledby="floor-title">

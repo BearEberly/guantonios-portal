@@ -304,6 +304,45 @@ test('operator arrival timing follows the service clock instead of the floor sna
   await expect(page.getByLabel('Arrival timing report')).toContainText('Late');
 });
 
+test('operator can run the selected-party host command tray on iPad', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Command Guest ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+  await page.clock.setFixedTime(new Date(booking.startsAt));
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, booking.date);
+  await selectReservationRow(page, booking.reference);
+
+  const selectedParty = page.locator('.selected-party-panel');
+  const command = page.getByLabel('Host command center');
+  await expect(command).toBeVisible();
+  await expect(command).toContainText('Next: check in');
+  await command.getByRole('button', { name: /^Check in$/ }).first().click();
+
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} to Checked in`))).toBeVisible();
+  await expect(selectedParty).toContainText('Here');
+  await expect(command).toContainText('Next: seat from floor');
+  await command.getByRole('button', { name: /^Seat from floor$/ }).click();
+  await expect(page.getByText(new RegExp(`Moving ${escapeRegex(booking.reference)}`))).toBeVisible();
+  await page.getByRole('button', { name: /Table P2, 2 seats/i }).click();
+
+  await expect(page.getByText(new RegExp(`Seated ${escapeRegex(booking.reference)} at table P2`))).toBeVisible();
+  await expect(selectedParty).toContainText(/table P2/i);
+  await expect(command).toContainText('Next: Ordered');
+  await command.getByRole('button', { name: /^Mark Ordered$/ }).click();
+
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} service stage to Ordered`))).toBeVisible();
+  await expect(command).toContainText('Next: Fired');
+  await command.getByRole('button', { name: /^Finish$/ }).click();
+
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} to Completed`))).toBeVisible();
+  await expect(selectedParty).toContainText('Completed');
+  await expect(command.getByRole('button', { name: /^Completed$/ })).toBeDisabled();
+});
+
 test('operator can edit selected reservation details from the iPad drawer', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
