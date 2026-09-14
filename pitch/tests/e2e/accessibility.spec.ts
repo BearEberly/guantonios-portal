@@ -30,7 +30,7 @@ async function expectNoAxeViolations(page: import('@playwright/test').Page) {
 }
 
 test('public demo pages pass automated accessibility smoke checks', async ({ page }) => {
-  for (const path of ['/', '/reservations', '/manage']) {
+  for (const path of ['/', '/reservations', '/manage', '/sms', '/sms/privacy', '/sms/terms']) {
     await page.goto(path);
     await expectNoHorizontalOverflow(page);
     await expectNoAxeViolations(page);

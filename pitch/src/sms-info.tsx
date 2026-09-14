@@ -40,7 +40,7 @@ export function SmsInfoPage({ path }: { path: SmsPath }) {
           {path === '/sms/terms' && <Terms />}
           <footer className="sms-info-footer">
             <p>Bear Eberly Photos · Reservation software demonstration</p>
-            <p>Last updated September 13, 2026</p>
+            <p>Last updated September 14, 2026</p>
           </footer>
         </article>
       </div>
@@ -61,6 +61,23 @@ function Program() {
       <p>After reading these disclosures and receiving the operator's confirmation that texting is enabled, a suggested first message is <strong>START</strong> to <strong>+1 (209) 709-4194</strong> from your own approved mobile phone.</p>
       <p>By initiating that conversation after reviewing these disclosures, you agree to receive automated SMS replies from the Bear Eberly Photos reservation demo about your request. This permission covers the conversation you start and the demo reservation actions you request. It does not enroll you in marketing texts.</p>
       <p>Message frequency varies with your requests. Message and data rates may apply. SMS participation is optional and is not a condition of any purchase or of using the web demo.</p>
+    </section>
+    <section className="sms-optin-card" aria-labelledby="sms-review-proof">
+      <h2 id="sms-review-proof">Opt-in proof for carrier review</h2>
+      <p><strong>Opt-in method:</strong> tester-initiated text keyword. The tester must first view this public page, then send the keyword <strong>START</strong> from their own mobile phone to <strong>+1 (209) 709-4194</strong>. No phone number is collected on this website and no one is enrolled by default.</p>
+      <div className="sms-consent-box" aria-label="SMS consent call to action">
+        <p className="sms-consent-label">Text this exact keyword to opt in after the operator confirms activation:</p>
+        <p className="sms-keyword"><span>START</span> to <span>+1 (209) 709-4194</span></p>
+        <p>By texting START, you consent to receive automated SMS replies from Bear Eberly Photos Reservation Demo about your demo reservation requests, confirmations, status checks, and cancellations.</p>
+        <p>Message frequency varies with your requests. Message and data rates may apply. Reply <strong>HELP</strong> for help. Reply <strong>STOP</strong> to opt out.</p>
+        <p>Review the <a href="/sms/privacy">SMS privacy notice</a> and <a href="/sms/terms">SMS terms</a> before texting START.</p>
+      </div>
+      <ol>
+        <li>Tester opens <strong>https://res.beareberly.com/sms</strong> and reviews the disclosure, privacy notice, and terms.</li>
+        <li>Tester sends <strong>START</strong> to <strong>+1 (209) 709-4194</strong> only if they choose to opt in.</li>
+        <li>The first automated reply identifies Bear Eberly Photos, states that this is a synthetic reservation demo, includes message frequency and rate disclosures, and explains STOP and HELP.</li>
+      </ol>
+      <p>Hosted screenshot for review: <a href="/sms-consent-proof.png">https://res.beareberly.com/sms-consent-proof.png</a>.</p>
     </section>
     <section aria-labelledby="sms-controls">
       <h2 id="sms-controls">Stop messages or get help</h2>
@@ -100,7 +117,8 @@ function Privacy() {
     </section>
     <section aria-labelledby="privacy-marketing">
       <h2 id="privacy-marketing">No marketing use of mobile consent</h2>
-      <p>We do not sell personal information. Mobile numbers and SMS opt-in or consent information are not sold, rented, or shared with third parties or affiliates for marketing or promotional purposes. Service providers may process this information as needed to operate the messaging program.</p>
+      <p>We do not sell personal information. Mobile numbers, SMS opt-in data, and SMS consent records are not sold, rented, or shared with third parties or affiliates for marketing or promotional purposes. Service providers may process this information only as needed to operate, secure, support, and troubleshoot the messaging program.</p>
+      <p>No mobile information will be shared with third parties or affiliates for their own marketing or promotional purposes. Text messaging originator opt-in data and consent will not be shared with any third parties except service providers that help deliver and operate the messaging program.</p>
     </section>
     <section aria-labelledby="privacy-retention">
       <h2 id="privacy-retention">Records and your choices</h2>
@@ -115,7 +133,7 @@ function Terms() {
     <section aria-labelledby="terms-program">
       <h2 id="terms-program">Program and participation</h2>
       <p>Bear Eberly Photos operates this optional SMS software demonstration at +1 (209) 709-4194. It is currently limited to invited, controlled testers after the operator confirms activation. Use a mobile number you own or are authorized to use.</p>
-      <p>Initiating a conversation after reviewing the <a href="/sms">program and consent disclosures</a> requests automated replies concerning that demo conversation. Messages can include questions about a requested reservation and responses to requested demo booking actions. Message frequency varies with your requests. Message and data rates may apply.</p>
+      <p>Initiating a conversation by texting START after reviewing the <a href="/sms">program and consent disclosures</a> requests automated replies concerning that demo conversation. Messages can include questions about a requested reservation and responses to requested demo booking actions. Message frequency varies with your requests. Message and data rates may apply.</p>
       <p>SMS consent is optional and is not a condition of purchase or web demo use. No marketing subscription is included.</p>
     </section>
     <section aria-labelledby="terms-demo">

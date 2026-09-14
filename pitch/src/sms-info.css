@@ -69,6 +69,53 @@
 .sms-info-article ul { padding-left: 24px; margin: 16px 0; }
 .sms-info-article li { padding-left: 3px; margin-bottom: 9px; }
 
+.sms-optin-card {
+  border: 1px solid #d8d0c4;
+  border-radius: 24px;
+  padding: 24px;
+  background: #fffaf1;
+  box-shadow: 0 18px 45px rgba(64, 45, 25, .08);
+}
+
+.sms-consent-box {
+  margin: 18px 0;
+  padding: 18px;
+  border: 2px solid var(--action-red);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.sms-consent-label {
+  margin-bottom: 8px;
+  color: #5b342e;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.sms-keyword {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--ink);
+  font-size: clamp(22px, 3vw, 34px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.sms-keyword span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: #191919;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
 .sms-info-status {
   border-left: 3px solid var(--action-red);
   padding: 3px 0 3px 20px;
