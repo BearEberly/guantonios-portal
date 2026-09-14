@@ -30,8 +30,10 @@ async function resetDemoData(request: APIRequestContext) {
     const floorBody = await floor.json().catch(() => null) as { ok?: boolean; tableBlocks?: unknown[]; error?: string } | null;
     const pacing = await request.post('/api/demo/operator/pacing', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
     const pacingBody = await pacing.json().catch(() => null) as { ok?: boolean; pacingRules?: unknown[]; error?: string } | null;
-    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && pacingBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0 && (floorBody.tableBlocks || []).length === 0 && (pacingBody.pacingRules || []).length === 0) return;
-    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length} blocks=${(floorBody?.tableBlocks || []).length} pacing=${(pacingBody?.pacingRules || []).length}`;
+    const notify = await request.post('/api/demo/operator/notify', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
+    const notifyBody = await notify.json().catch(() => null) as { ok?: boolean; notifyRequests?: unknown[]; error?: string } | null;
+    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && pacingBody?.ok && notifyBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0 && (floorBody.tableBlocks || []).length === 0 && (pacingBody.pacingRules || []).length === 0 && (notifyBody.notifyRequests || []).length === 0) return;
+    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length} blocks=${(floorBody?.tableBlocks || []).length} pacing=${(pacingBody?.pacingRules || []).length} notify=${(notifyBody?.notifyRequests || []).length}`;
   }
   throw new Error(lastError || 'reset failed');
 }
@@ -372,6 +374,40 @@ test('operator can add, notify, and seat a walk-in from the Wait rail', async ({
 
   await expect(page.getByText(/Seated waitlist party DEMO-[A-Z0-9]+ at table P1/i)).toBeVisible();
   await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table/i);
+});
+
+test('guest can join Notify from an unavailable time and operator can mark it from the iPad queue', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const slot = await findOpenDemoSlot(request, 2, 'indoor', '19:30');
+  await apiPost(request, '/api/demo/operator/pacing', { op: 'set', date: slot.date, time: slot.time, maxCovers: 1, reason: 'Notify e2e cap.' });
+
+  await page.goto('/reservations');
+  await page.locator('#availability input[type="date"]').fill(slot.date);
+  await page.locator('#availability select').nth(0).selectOption('2');
+  await page.locator('#availability select').nth(1).selectOption(slot.time);
+  await page.locator('#availability select').nth(2).selectOption('indoor');
+  await page.getByRole('button', { name: /^search$/i }).click();
+  await expect(page.getByRole('heading', { name: /join the notify list/i })).toBeVisible();
+
+  const notifyName = `Notify Guest ${Date.now()}`;
+  await page.getByLabel('Name').fill(notifyName);
+  await page.getByLabel('Mobile').fill('(209) 555-0198');
+  await page.locator('#notifySmsConsent').check();
+  await page.getByRole('button', { name: /add notify request/i }).click();
+  await expect(page.getByRole('heading', { name: /notify request added/i })).toBeVisible();
+  await expect(page.getByText(/protected iPad operator Notify queue/i)).toBeVisible();
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Choose service date').fill(slot.date);
+  await page.getByRole('button', { name: /^Notify\s+1$/i }).click();
+  const notifyRow = page.locator('.notify-row').filter({ hasText: notifyName }).first();
+  await expect(notifyRow).toBeVisible();
+  await expect(notifyRow).toContainText(/No exact table|Alternates found/i);
+  await notifyRow.getByRole('button', { name: /mark notified/i }).click();
+  await expect(notifyRow).toContainText(/Notified/i);
 });
 
 test('operator can seat an 8 top with a combined patio table setup', async ({ page, request }) => {

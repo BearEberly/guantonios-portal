@@ -61,6 +61,15 @@ const pacingList = await post('/api/demo/operator/pacing', { op: 'list' }, opera
 assert(pacingList.status === 200 && pacingList.data.pacingRules.some(r => r.id === pacingSet.data.pacingRule.id), 'pacing list missing active rule', pacingList);
 const cappedSearch = await post('/api/demo/search', { date: slot.date, time: slot.time, partySize: 2, section: 'indoor' });
 assert(!(cappedSearch.data.slots || []).some(s => s.date === slot.date && s.time === slot.time && s.exact), 'paced slot should not return exact availability for a 2-top', cappedSearch);
+const notifyCreate = await post('/api/demo/notify', { date: slot.date, time: slot.time, partySize: 2, section: 'indoor', guestLabel: 'API Notify Guest', contact: '2095550198', note: 'API regression notify request.' });
+assert(notifyCreate.status === 200 && notifyCreate.data.ok && notifyCreate.data.notifyRequestId && notifyCreate.data.notifyRequest?.status === 'active', 'notify request create failed', notifyCreate);
+const wrongNotifyList = await post('/api/demo/operator/notify', { op: 'list' }, 'wrong-token');
+assert(wrongNotifyList.status === 401 && wrongNotifyList.data.error === 'operator_unauthorized', 'wrong token should reject notify list', wrongNotifyList);
+const notifyList = await post('/api/demo/operator/notify', { op: 'list' }, operatorToken);
+assert(notifyList.status === 200 && notifyList.data.notifyRequests.some(n => n.id === notifyCreate.data.notifyRequestId), 'operator notify list missing request', notifyList);
+const notifyStatus = await post('/api/demo/operator/notify', { op: 'status', notifyRequestId: notifyCreate.data.notifyRequestId, status: 'notified' }, operatorToken);
+assert(notifyStatus.status === 200 && notifyStatus.data.notifyRequest?.status === 'notified', 'operator notify status update failed', notifyStatus);
+evidence.push(['operator_notify', notifyCreate.status, notifyStatus.data.notifyRequest.status, notifyList.data.notifyRequests.length]);
 const pacingClear = await post('/api/demo/operator/pacing', { op: 'clear', ruleId: pacingSet.data.pacingRule.id }, operatorToken);
 assert(pacingClear.status === 200 && pacingClear.data.ok && pacingClear.data.pacingRule?.status === 'cleared', 'pacing clear failed', pacingClear);
 const restoredSearch = await post('/api/demo/search', { date: slot.date, time: slot.time, partySize: 2, section: 'indoor' });
@@ -187,7 +196,11 @@ if (supabaseUrl && supabaseAnonKey) {
     headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
   });
   assert(directPacing.status >= 400, 'anon key should not directly read reservation_demo.pacing_rules', directPacing.status);
-  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status, directCombos.status, directPacing.status]);
+  const directNotify = await fetch(`${supabaseUrl}/rest/v1/notify_requests?select=id&limit=1`, {
+    headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
+  });
+  assert(directNotify.status >= 400, 'anon key should not directly read reservation_demo.notify_requests', directNotify.status);
+  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status, directCombos.status, directPacing.status, directNotify.status]);
 }
 
 console.log(JSON.stringify({ ok: true, base, evidence }, null, 2));

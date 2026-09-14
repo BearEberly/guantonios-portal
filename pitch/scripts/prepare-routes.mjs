@@ -22,24 +22,24 @@ const pages = {
       </section>
       <section aria-labelledby="sms-consent">
         <h2 id="sms-consent">How participation works</h2>
-        <p>Once setup is complete, the operator will invite approved testers to start a conversation by texting the program number from their own mobile phone. This page does not collect a phone number or enroll anyone.</p>
-        <p>After reading these disclosures and receiving the operator's confirmation that texting is enabled, a suggested first message is <strong>START</strong> to <strong>+1 (209) 709-4194</strong> from your own approved mobile phone.</p>
-        <p>By initiating that conversation after reviewing these disclosures, you agree to receive automated SMS replies from the Bear Eberly Photos reservation demo about your request. This permission covers the conversation you start and the demo reservation actions you request. It does not enroll you in marketing texts.</p>
+        <p>Once setup is complete, approved testers can opt in from the reservation website by entering their mobile number and checking the text-message consent box when they request a Notify follow-up or ask for reservation updates.</p>
+        <p>Approved testers can also start a conversation by texting <strong>START</strong> to <strong>+1 (209) 709-4194</strong> from their own mobile phone after reading these disclosures and receiving the operator's confirmation that texting is enabled.</p>
+        <p>By checking the consent box or texting START after reviewing these disclosures, you agree to receive automated SMS replies from the Bear Eberly Photos reservation demo about your request. This permission covers reservation availability, confirmations, status, and cancellations. It does not enroll you in marketing texts.</p>
         <p>Message frequency varies with your requests. Message and data rates may apply. SMS participation is optional and is not a condition of any purchase or of using the web demo.</p>
       </section>
       <section class="sms-optin-card" aria-labelledby="sms-review-proof">
         <h2 id="sms-review-proof">Opt-in proof for carrier review</h2>
-        <p><strong>Opt-in method:</strong> tester-initiated text keyword. The tester must first view this public page, then send the keyword <strong>START</strong> from their own mobile phone to <strong>+1 (209) 709-4194</strong>. No phone number is collected on this website and no one is enrolled by default.</p>
+        <p><strong>Opt-in methods:</strong> website checkbox and tester-initiated text keyword. No one is enrolled by default, the checkbox is not preselected, and live texting remains disabled until carrier approval.</p>
         <div class="sms-consent-box" aria-label="SMS consent call to action">
+          <p class="sms-consent-label">Website opt-in copy shown beside the phone-number field:</p>
+          <p>"I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See privacy and terms."</p>
           <p class="sms-consent-label">Text this exact keyword to opt in after the operator confirms activation:</p>
           <p class="sms-keyword"><span>START</span> to <span>+1 (209) 709-4194</span></p>
-          <p>By texting START, you consent to receive automated SMS replies from Bear Eberly Photos Reservation Demo about your demo reservation requests, confirmations, status checks, and cancellations.</p>
-          <p>Message frequency varies with your requests. Message and data rates may apply. Reply <strong>HELP</strong> for help. Reply <strong>STOP</strong> to opt out.</p>
-          <p>Review the <a href="/sms/privacy/">SMS privacy notice</a> and <a href="/sms/terms/">SMS terms</a> before texting START.</p>
+          <p>Review the <a href="/sms/privacy/">SMS privacy notice</a> and <a href="/sms/terms/">SMS terms</a> before using either opt-in method.</p>
         </div>
         <ol>
-          <li>Tester opens <strong>https://res.beareberly.com/sms/</strong> and reviews the disclosure, privacy notice, and terms.</li>
-          <li>Tester sends <strong>START</strong> to <strong>+1 (209) 709-4194</strong> only if they choose to opt in.</li>
+          <li>Website flow: tester opens <strong>https://res.beareberly.com/reservations/</strong>, enters a requested reservation or Notify request, enters their mobile number, checks the consent box, and submits the request.</li>
+          <li>Keyword flow: tester opens <strong>https://res.beareberly.com/sms/</strong>, reviews the disclosure, privacy notice, and terms, then sends <strong>START</strong> to <strong>+1 (209) 709-4194</strong> only if they choose to opt in.</li>
           <li>The first automated reply identifies Bear Eberly Photos, states that this is a synthetic reservation demo, includes message frequency and rate disclosures, and explains STOP and HELP.</li>
         </ol>
         <p>Hosted screenshot for review: <a href="/sms-consent-proof.png">https://res.beareberly.com/sms-consent-proof.png</a>.</p>
@@ -100,7 +100,7 @@ const pages = {
       <section aria-labelledby="terms-program">
         <h2 id="terms-program">Program and participation</h2>
         <p>Bear Eberly Photos operates this optional SMS software demonstration at +1 (209) 709-4194. It is currently limited to invited, controlled testers after the operator confirms activation. Use a mobile number you own or are authorized to use.</p>
-        <p>Initiating a conversation by texting START after reviewing the <a href="/sms/">program and consent disclosures</a> requests automated replies concerning that demo conversation. Messages can include questions about a requested reservation and responses to requested demo booking actions. Message frequency varies with your requests. Message and data rates may apply.</p>
+        <p>Checking the website consent box or initiating a conversation by texting START after reviewing the <a href="/sms/">program and consent disclosures</a> requests automated replies concerning that demo conversation. Messages can include questions about a requested reservation and responses to requested demo booking actions. Message frequency varies with your requests. Message and data rates may apply.</p>
         <p>SMS consent is optional and is not a condition of purchase or web demo use. No marketing subscription is included.</p>
       </section>
       <section aria-labelledby="terms-demo">
@@ -144,6 +144,8 @@ const renderSmsPage = (route, page) => `<!doctype html>
       .sms-info-nav { display: flex; align-items: flex-start; flex-direction: column; gap: 9px; padding-top: 7px; }
       .sms-info-nav a { padding: 6px 0; font-size: 14px; text-decoration: none; border-bottom: 2px solid transparent; }
       .sms-info-nav a[aria-current="page"] { font-weight: 700; border-color: var(--action-red); }
+      .sms-info-article, .sms-info-article * { min-width: 0; }
+      .sms-info-article { overflow-wrap: anywhere; }
       h1 { margin: 0; font-size: clamp(30px, 3.2vw, 40px); line-height: 1.15; letter-spacing: -.04em; }
       .sms-info-intro { margin: 14px 0 30px; color: #525252; }
       section { margin-top: 34px; }
@@ -155,7 +157,7 @@ const renderSmsPage = (route, page) => `<!doctype html>
       .sms-consent-box { margin: 18px 0; padding: 18px; border: 2px solid var(--action-red); border-radius: 18px; background: #fff; }
       .sms-consent-label { margin-bottom: 8px; color: #5b342e; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
       .sms-keyword { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--ink); font-size: clamp(22px, 3vw, 34px); font-weight: 800; line-height: 1.15; }
-      .sms-keyword span { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 12px; border-radius: 12px; background: #191919; color: #fff; font-variant-numeric: tabular-nums; }
+      .sms-keyword span { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; padding: 6px 12px; border-radius: 12px; background: #191919; color: #fff; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
       .sms-info-status { border-left: 3px solid var(--action-red); padding: 3px 0 3px 20px; margin: 28px 0 38px; color: #404040; font-size: 15px; }
       .sms-info-status strong { display: block; color: var(--ink); margin-bottom: 10px; }
       .sms-info-status p:last-child { margin-bottom: 0; }

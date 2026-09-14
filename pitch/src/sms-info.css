@@ -60,6 +60,16 @@
 }
 
 .sms-info-nav a:hover { text-decoration: underline; text-underline-offset: 5px; }
+
+.sms-info-article,
+.sms-info-article * {
+  min-width: 0;
+}
+
+.sms-info-article {
+  overflow-wrap: anywhere;
+}
+
 .sms-info-article h1 { margin: 0; font-size: clamp(30px, 3.2vw, 40px); line-height: 1.15; letter-spacing: -.04em; }
 .sms-info-intro { margin: 14px 0 30px; color: #525252; }
 .sms-info-article section { margin-top: 34px; }
@@ -114,6 +124,8 @@
   background: #191919;
   color: #fff;
   font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .sms-info-status {

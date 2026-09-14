@@ -127,6 +127,28 @@ export interface TableBlock {
   clearedAt?: string | null;
 }
 
+
+export interface NotifyRequest {
+  id: string;
+  status: 'active' | 'notified' | 'booked' | 'cancelled' | string;
+  partySize: number;
+  section?: SeatingSection | null;
+  requestedDate: string;
+  requestedTime: string;
+  startsAt: string;
+  endsAt: string;
+  guestLabel: string;
+  contact?: string;
+  note?: string;
+  source?: string;
+  availableCountAtRequest?: number;
+  createdAt: string;
+  updatedAt?: string;
+  notifiedAt?: string | null;
+  bookedAt?: string | null;
+  cancelledAt?: string | null;
+}
+
 export interface WaitlistEntry {
   id: string;
   status: 'waiting' | 'notified' | 'seated' | 'cancelled' | string;
@@ -154,6 +176,7 @@ export interface OperatorState {
   bookings: Array<ReservationSummary & { tableCode?: string; createdAt?: string }>;
   holds: Array<{ id: string; partySize: number; section: SeatingSection; startsAt: string; expiresAt: string; status: string }>;
   waitlist: WaitlistEntry[];
+  notifyRequests: NotifyRequest[];
   profiles: GuestProfile[];
   tableBlocks: TableBlock[];
   pacingRules: PacingRule[];

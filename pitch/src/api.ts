@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, NotifyRequest, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -41,6 +41,11 @@ export function confirmReservation(input: { holdId: string; holdToken: string; i
   return request<BookingResult>('/api/demo/confirm', input);
 }
 
+
+export function createNotifyRequest(input: { date: string; time: string; partySize: number; section?: SeatingSection | 'either' | string; guestLabel: string; contact?: string; note?: string }) {
+  return request<{ ok: boolean; notifyRequestId?: string; notifyRequest?: NotifyRequest; error?: string }>('/api/demo/notify', input);
+}
+
 export function viewReservation(input: { reference: string; manageToken: string }) {
   return request<{ ok: boolean; reservation?: ReservationSummary; error?: string }>('/api/demo/view', input);
 }
@@ -54,9 +59,10 @@ export function cancelReservation(input: { reference: string; manageToken: strin
 }
 
 export async function operatorList(token: string) {
-  const [state, waitlist, guests, floor, pacing] = await Promise.all([
+  const [state, waitlist, notify, guests, floor, pacing] = await Promise.all([
     request<OperatorState>('/api/demo/operator/list', {}, token),
     request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token),
+    request<{ ok: boolean; notifyRequests: NotifyRequest[]; error?: string }>('/api/demo/operator/notify', { op: 'list' }, token),
     request<{ ok: boolean; profiles: GuestProfile[]; error?: string }>('/api/demo/operator/guest', { op: 'list' }, token),
     request<{ ok: boolean; tableBlocks: TableBlock[]; tableCombinations: TableCombination[]; error?: string }>('/api/demo/operator/floor', { op: 'list' }, token),
     request<{ ok: boolean; pacingRules: PacingRule[]; error?: string }>('/api/demo/operator/pacing', { op: 'list' }, token)
@@ -76,11 +82,19 @@ export async function operatorList(token: string) {
       privateNotePreview: profile.privateNote ? 'Private note' : ''
     } : booking;
   });
-  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [], pacingRules: pacing.pacingRules || state.pacingRules || [], tableCombinations: floor.tableCombinations || state.tableCombinations || [] };
+  return { ...state, bookings, waitlist: waitlist.waitlist || [], notifyRequests: notify.notifyRequests || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [], pacingRules: pacing.pacingRules || state.pacingRules || [], tableCombinations: floor.tableCombinations || state.tableCombinations || [] };
 }
 
 export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
   return request<{ ok: boolean; reference: string; status: string; tableCode?: string; error?: string }>('/api/demo/operator/status', { reference, status, ...(tableCode ? { tableCode } : {}) }, token);
+}
+
+
+export function operatorNotify(token: string, input:
+  | { op: 'list' }
+  | { op: 'status'; notifyRequestId: string; status: 'active' | 'notified' | 'booked' | 'cancelled' }
+) {
+  return request<{ ok: boolean; notifyRequestId?: string; notifyRequest?: NotifyRequest; notifyRequests?: NotifyRequest[]; error?: string }>('/api/demo/operator/notify', input, token);
 }
 
 export function operatorWaitlist(token: string, input: { op: 'create'; guestLabel: string; contact?: string; date: string; time: string; partySize: number; section?: SeatingSection | 'either'; quotedWaitMinutes?: number; note?: string } | { op: 'status'; waitlistId: string; status: 'waiting' | 'notified' | 'cancelled' } | { op: 'seat'; waitlistId: string; tableCode: string }) {

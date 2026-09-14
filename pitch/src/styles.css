@@ -3619,3 +3619,103 @@ button.timeline-cell:hover,
   border-color: #ffb568;
   color: #1c0f06;
 }
+
+.notify-request-card,
+.notify-confirmation-card {
+  display: grid;
+  gap: 18px;
+  margin: 26px 0 32px;
+  padding: 22px;
+  border: 1px solid #f0c4be;
+  border-radius: 16px;
+  background: #fff8f6;
+  box-shadow: 0 14px 34px rgba(235, 23, 0, .08);
+}
+
+.notify-request-card h2,
+.notify-confirmation-card h2 {
+  margin: 0 0 8px;
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: -.04em;
+}
+
+.notify-request-card p,
+.notify-confirmation-card p {
+  margin: 0;
+  color: #4a4a4a;
+  font-weight: 750;
+}
+
+.notify-form {
+  padding-top: 4px;
+}
+
+.sms-consent-check {
+  display: grid !important;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid #d9e1ea;
+  border-radius: 12px;
+  padding: 14px;
+  background: #f9fbfd;
+  color: #28323c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sms-consent-check input {
+  width: 18px;
+  min-height: 18px !important;
+  margin-top: 2px;
+  accent-color: var(--resy-red);
+}
+
+.sms-consent-check span {
+  display: block;
+  font-weight: 800;
+}
+
+.sms-consent-check a {
+  color: var(--blue);
+  font-weight: 950;
+}
+
+.operator-row.notify-row {
+  box-shadow: inset 4px 0 0 #f7c948;
+}
+
+.operator-row.notify-row.notified {
+  box-shadow: inset 4px 0 0 #45b8e8;
+}
+
+.operator-row.notify-row.booked {
+  box-shadow: inset 4px 0 0 #6fbf73;
+}
+
+.operator-row.notify-row.cancelled {
+  box-shadow: inset 4px 0 0 #cf4b48;
+  opacity: .72;
+}
+
+.operator-row.notify-row .operator-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.operator-row.notify-row .status-pill {
+  background: #fff1b8;
+  color: #1f1b0b !important;
+}
+
+.operator-row.notify-row.notified .status-pill {
+  background: #dff5ff;
+}
+
+.operator-row.notify-row.booked .status-pill {
+  background: #e0f5e3;
+}
+
+.operator-row.notify-row.cancelled .status-pill {
+  background: #8c2929;
+  color: white !important;
+}

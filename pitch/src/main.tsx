@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorPacing, operatorReset, operatorService, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, TurnRisk, WaitlistEntry } from './types';
+import { cancelReservation, changeReservation, confirmReservation, createHold, createNotifyRequest, operatorFloor, operatorGuest, operatorList, operatorNotify, operatorPacing, operatorReset, operatorService, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, NotifyRequest, OperatorState, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, TurnRisk, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -86,6 +86,10 @@ function ReservationsPage() {
   const [status, setStatus] = useState('Choose guests, date, and time to search synthetic demo availability.');
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState<BookingResult | null>(null);
+  const [searched, setSearched] = useState(false);
+  const [exactAvailable, setExactAvailable] = useState(false);
+  const [notifyResult, setNotifyResult] = useState<NotifyRequest | null>(null);
+  const [notifyBusy, setNotifyBusy] = useState(false);
   const dates = useMemo(() => Array.from({ length: 10 }, (_, i) => isoDateInLosAngeles(i)), []);
   const criteriaChangedAfterMount = useRef(false);
 
@@ -98,6 +102,9 @@ function ReservationsPage() {
     setSelected(null);
     setHold(null);
     setConfirmed(null);
+    setSearched(false);
+    setExactAvailable(false);
+    setNotifyResult(null);
     setStatus('Criteria changed. Search again so a stale slot cannot be booked.');
   }, [date, time, partySize, section]);
 
@@ -111,8 +118,13 @@ function ReservationsPage() {
     try {
       const result = await searchAvailability({ date, time, partySize, section });
       if (!result.ok) throw new Error(result.error || 'Search failed');
-      setSlots(result.slots || []);
-      setStatus(result.available ? 'Choose a demo time and seating area.' : noAvailabilityCopy(result.reason));
+      const nextSlots = result.slots || [];
+      const exactSlotAvailable = nextSlots.some(slot => slot.exact && slot.date === date && slot.time === time);
+      setSlots(nextSlots);
+      setSearched(true);
+      setExactAvailable(exactSlotAvailable);
+      setNotifyResult(null);
+      setStatus(exactSlotAvailable ? 'Choose a demo time and seating area.' : result.available ? 'Exact requested time is unavailable. Choose a nearby demo time or join Notify.' : noAvailabilityCopy(result.reason));
     } catch (error) {
       setStatus(`Backend error: ${error instanceof Error ? error.message : 'Availability could not be checked.'}`);
     } finally {
@@ -164,6 +176,33 @@ function ReservationsPage() {
       setBusy(false);
     }
   }
+
+  async function submitNotify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setNotifyBusy(true);
+    setStatus('Adding your synthetic Notify request to the iPad queue...');
+    try {
+      const result = await createNotifyRequest({
+        date,
+        time,
+        partySize,
+        section: section || 'either',
+        guestLabel: String(form.get('notifyName') || 'Notify Guest'),
+        contact: String(form.get('notifyContact') || ''),
+        note: String(form.get('notifyNote') || '')
+      });
+      if (!result.ok || !result.notifyRequest) throw new Error(result.error || 'Notify request failed');
+      setNotifyResult(result.notifyRequest);
+      setStatus('Notify request added to the protected iPad queue. No live text was sent.');
+    } catch (error) {
+      setStatus(`Notify request failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setNotifyBusy(false);
+    }
+  }
+
+  const showNotifyRequest = searched && !exactAvailable && !hold && !confirmed;
 
   return (
     <main className="booking-page">
@@ -254,6 +293,36 @@ function ReservationsPage() {
               </article>
             ))}
           </section>
+          {showNotifyRequest && !notifyResult && (
+            <section className="notify-request-card" aria-labelledby="notify-request-title">
+              <div>
+                <p className="demo-tag">Notify demo</p>
+                <h2 id="notify-request-title">Join the Notify list for this time</h2>
+                <p>No exact table matched {time} for {partySize} {partySize === 1 ? 'guest' : 'guests'}. Add a synthetic request so the iPad host queue can follow up if a matching table opens.</p>
+              </div>
+              <form onSubmit={submitNotify} className="guest-form notify-form">
+                <div className="field-row">
+                  <label htmlFor="notifyName">Name<input id="notifyName" name="notifyName" required defaultValue="Demo Notify Guest" autoComplete="name" /></label>
+                  <label htmlFor="notifyContact">Mobile<input id="notifyContact" name="notifyContact" required defaultValue="(209) 555-0198" autoComplete="tel" /></label>
+                </div>
+                <label htmlFor="notifyNote">Optional note<textarea id="notifyNote" name="notifyNote" maxLength={180} defaultValue={`Requested ${time} ${section || 'either seating'}.`} /></label>
+                <label className="sms-consent-check" htmlFor="notifySmsConsent">
+                  <input id="notifySmsConsent" name="notifySmsConsent" type="checkbox" required />
+                  <span>I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See <a href="/sms/privacy">privacy</a> and <a href="/sms/terms">terms</a>.</span>
+                </label>
+                <p className="demo-warning">This creates a protected iPad queue item only. Live text sending stays off until carrier approval.</p>
+                <button type="submit" disabled={busy || notifyBusy}>{notifyBusy ? 'Adding...' : 'Add Notify request'}</button>
+              </form>
+            </section>
+          )}
+          {showNotifyRequest && notifyResult && (
+            <section className="notify-confirmation-card" aria-labelledby="notify-confirmed-title">
+              <p className="demo-tag">Notify queue</p>
+              <h2 id="notify-confirmed-title">Notify request added</h2>
+              <p>{notifyResult.guestLabel} is queued for {notifyResult.partySize} at {notifyResult.requestedTime} on {notifyResult.requestedDate}, {notifyResult.section || 'either seating'}.</p>
+              <p>Request {notifyResult.id.slice(0, 8)} is now visible in the protected iPad operator Notify queue. No live text was sent.</p>
+            </section>
+          )}
           {hold && selected && !confirmed && (
             <section className="booking-dialog" aria-labelledby="booking-form-title">
               <div className="summary-box">
@@ -271,7 +340,11 @@ function ReservationsPage() {
                 <label htmlFor="email">Email<input id="email" name="email" required type="email" defaultValue="demo@example.invalid" autoComplete="email" /></label>
                 <label htmlFor="mobile">Mobile<input id="mobile" name="mobile" required defaultValue="(209) 555-0199" autoComplete="tel" /></label>
                 <label htmlFor="request">Optional request<textarea id="request" name="request" maxLength={160} defaultValue="Demo note, not saved to a real guest profile." /></label>
-                <p className="demo-warning">No real reservation, email, text message, payment, or Resy account action will happen.</p>
+                <label className="sms-consent-check" htmlFor="bookingSmsConsent">
+                  <input id="bookingSmsConsent" name="bookingSmsConsent" type="checkbox" />
+                  <span>Send me automated text updates from the Bear Eberly Photos reservation demo about this reservation, including confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See <a href="/sms/privacy">privacy</a> and <a href="/sms/terms">terms</a>.</span>
+                </label>
+                <p className="demo-warning">No real reservation, email, text message, payment, or Resy account action will happen. Live texting stays off until carrier approval.</p>
                 <button type="submit" disabled={busy}>{busy ? 'Confirming...' : 'Confirm demo reservation'}</button>
               </form>
             </section>
@@ -550,6 +623,7 @@ function OperatorPage() {
   const [waitQuote, setWaitQuote] = useState(25);
   const [waitNote, setWaitNote] = useState('Walk-in from the host stand.');
   const [waitBusy, setWaitBusy] = useState(false);
+  const [notifyBusy, setNotifyBusy] = useState(false);
   const [selectedGuestProfileId, setSelectedGuestProfileId] = useState<string | null>(null);
   const [profileNameDraft, setProfileNameDraft] = useState('');
   const [profileContactDraft, setProfileContactDraft] = useState('');
@@ -782,6 +856,19 @@ function OperatorPage() {
     }
   }
 
+  async function updateNotifyStatus(entry: NotifyRequest, nextStatus: 'active' | 'notified' | 'booked' | 'cancelled') {
+    setNotifyBusy(true);
+    try {
+      const result = await operatorNotify(token, { op: 'status', notifyRequestId: entry.id, status: nextStatus });
+      if (!result.ok) throw new Error(result.error || 'Notify update failed');
+      await load(undefined, `${entry.guestLabel} marked ${statusLabel(nextStatus)} in Notify.`);
+    } catch (error) {
+      setStatus(`Notify update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setNotifyBusy(false);
+    }
+  }
+
   async function startWaitlistSeating(entry: WaitlistEntry) {
     setSelectedWaitlistId(entry.id);
     setSelectedReference(null);
@@ -834,14 +921,17 @@ function OperatorPage() {
   const allPacingRules = state?.pacingRules || [];
   const tableCombinations = state?.tableCombinations || [];
   const notifications = state?.notifications || [];
+  const allNotifyRequests = state?.notifyRequests || [];
   const bookingIsOnSelectedService = (booking: ReservationSummary) => dateKeyFromTimestamp(booking.startsAt) === selectedServiceDate;
   const holdIsOnSelectedService = (hold: { startsAt: string }) => dateKeyFromTimestamp(hold.startsAt) === selectedServiceDate;
   const waitlistIsOnSelectedService = (entry: WaitlistEntry) => entry.requestedDate === selectedServiceDate || dateKeyFromTimestamp(entry.startsAt) === selectedServiceDate;
+  const notifyRequestIsOnSelectedService = (entry: NotifyRequest) => entry.requestedDate === selectedServiceDate || dateKeyFromTimestamp(entry.startsAt) === selectedServiceDate;
   const blockIsOnSelectedService = (block: TableBlock) => block.serviceDate === selectedServiceDate || dateKeyFromTimestamp(block.startsAt) === selectedServiceDate;
   const pacingRuleIsOnSelectedService = (rule: PacingRule) => rule.serviceDate === selectedServiceDate && rule.status === 'active';
   const bookings = allBookings.filter(bookingIsOnSelectedService);
   const holds = allHolds.filter(holdIsOnSelectedService);
   const waitlist = allWaitlist.filter(waitlistIsOnSelectedService);
+  const notifyRequests = allNotifyRequests.filter(notifyRequestIsOnSelectedService);
   const tableBlocks = allTableBlocks.filter(blockIsOnSelectedService);
   const pacingRules = allPacingRules.filter(pacingRuleIsOnSelectedService);
   const selectedServiceLabel = serviceDateLabel(selectedServiceDate);
@@ -854,8 +944,10 @@ function OperatorPage() {
   const cancelledCount = bookings.filter(booking => booking.status === 'cancelled').length;
   const previewCount = notifications.length;
   const openWaitlist = waitlist.filter(entry => ['waiting', 'notified'].includes(entry.status));
+  const activeNotifyRequests = notifyRequests.filter(entry => ['active', 'notified'].includes(entry.status));
   const waitlistCount = openWaitlist.length;
-  const reportAttentionCount = bookedCount + checkInCount + waitlistCount + tableBlocks.length;
+  const notifyRequestCount = activeNotifyRequests.length;
+  const reportAttentionCount = bookedCount + checkInCount + waitlistCount + notifyRequestCount + tableBlocks.length;
   const explicitSelectedBooking = selectedReference ? bookings.find(booking => booking.reference === selectedReference) || null : null;
   const selectedWaitlistEntry = selectedWaitlistId ? waitlist.find(entry => entry.id === selectedWaitlistId) || null : null;
   const selectedBooking = selectedWaitlistEntry ? null : explicitSelectedBooking || activeBookings[0] || bookings[0] || null;
@@ -958,9 +1050,20 @@ function OperatorPage() {
     if (partySizeFilter === '7+') return entry.partySize >= 7;
     return entry.partySize === partySizeFilter;
   };
+  const notifyMatches = (entry: NotifyRequest) => {
+    const query = queueSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [entry.guestLabel, entry.id, entry.section || 'either', entry.requestedTime, entry.note || '', entry.status]
+      .some(value => value.toLowerCase().includes(query));
+  };
+  const notifyPartyMatches = (entry: NotifyRequest) => {
+    if (!partySizeFilter) return true;
+    if (partySizeFilter === '7+') return entry.partySize >= 7;
+    return entry.partySize === partySizeFilter;
+  };
   const visibleWaitlist = queueFilter === 'Waitlist' ? openWaitlist.filter(entry => waitlistPartyMatches(entry) && waitlistMatches(entry)) : [];
   const visibleHolds = queueFilter === 'Waitlist' ? openHolds : [];
-  const visibleNotifications = queueFilter === 'Notify' ? notifications : [];
+  const visibleNotifyRequests = queueFilter === 'Notify' ? activeNotifyRequests.filter(entry => notifyPartyMatches(entry) && notifyMatches(entry)) : [];
   const profileMatches = (profile: GuestProfile) => {
     const query = queueSearch.trim().toLowerCase();
     if (!query) return true;
@@ -990,7 +1093,7 @@ function OperatorPage() {
   ];
   const railGroups = [
     { label: 'All', count: bookings.length },
-    { label: 'Notify', count: previewCount },
+    { label: 'Notify', count: notifyRequestCount },
     { label: 'Waitlist', count: waitlistCount },
     { label: 'Booked', count: bookedCount },
     { label: 'Seated', count: seatedCount },
@@ -1537,7 +1640,7 @@ function OperatorPage() {
             <div>
               <p className="demo-tag operator-demo-tag">iPad operator demo</p>
               <h1>Tonight's demo service</h1>
-              <p>Protected view for check-in, seating rehearsal, cancellation, waitlist holds, and disabled notification preview.</p>
+              <p>Protected view for check-in, seating rehearsal, cancellation, waitlist holds, Notify requests, and text readiness.</p>
             </div>
             <form onSubmit={load}>
               <label>Operator passcode<input type="password" value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></label>
@@ -1623,6 +1726,7 @@ function OperatorPage() {
               <article><span>Checked in</span><strong>{checkInCount}</strong></article>
               <article><span>Seated</span><strong>{seatedCount}</strong></article>
               <article><span>Waitlist</span><strong>{waitlistCount}</strong></article>
+              <article><span>Notify</span><strong>{notifyRequestCount}</strong></article>
               <article><span>Profiles</span><strong>{profiles.length}</strong></article>
               <article><span>Blocks</span><strong>{tableBlocks.length}</strong></article>
               <article><span>Combos</span><strong>{tableCombinations.length}</strong></article>
@@ -1798,7 +1902,7 @@ function OperatorPage() {
                 <div className="section-heading">
                   <div>
                     <h2>Reservations</h2>
-                    <p>{queueFilter} queue · {visibleBookings.length + visibleWaitlist.length + visibleHolds.length + visibleNotifications.length} visible · {visibleActiveCovers} active covers.</p>
+                    <p>{queueFilter} queue · {visibleBookings.length + visibleWaitlist.length + visibleHolds.length + visibleNotifyRequests.length} visible · {visibleActiveCovers} active covers.</p>
                   </div>
                 </div>
                 {activeRail === 'Wait' && (
@@ -1827,7 +1931,7 @@ function OperatorPage() {
                 )}
                 {bookings.length === 0 && queueFilter !== 'Waitlist' && queueFilter !== 'Notify' && <p>No synthetic bookings yet.</p>}
                 {queueFilter === 'Waitlist' && visibleWaitlist.length === 0 && <p>No active walk-ins on the waitlist.</p>}
-                {queueFilter === 'Notify' && visibleNotifications.length === 0 && <p>No notification previews yet.</p>}
+                {queueFilter === 'Notify' && visibleNotifyRequests.length === 0 && <p>No active Notify requests match this service, party size, or search.</p>}
                 {bookings.length > 0 && queueFilter !== 'Waitlist' && queueFilter !== 'Notify' && visibleBookings.length === 0 && <p>No parties match this queue, party size, or search.</p>}
                 {visibleWaitlist.map(entry => (
                   <article key={entry.id} className={`operator-row waitlist-row ${entry.status} ${selectedWaitlistId === entry.id ? 'selected' : ''}`}>
@@ -1873,17 +1977,28 @@ function OperatorPage() {
                     <span className="status-pill">{statusLabel(hold.status)}</span>
                   </article>
                 ))}
-                {visibleNotifications.map((notification, index) => (
-                  <article key={`${notification.createdAt}-${index}`} className="operator-row notification-row">
+                {visibleNotifyRequests.map(entry => (
+                  <article key={entry.id} className={`operator-row notify-row ${entry.status}`}>
                     <div className="operator-guest">
-                      <strong>{notification.eventType}</strong>
-                      <span>{notification.adapter}</span>
+                      <strong>{entry.guestLabel}</strong>
+                      <span>{entry.id.slice(0, 8)} · Notify request</span>
                     </div>
                     <div className="operator-time">
-                      <strong>{statusLabel(notification.status)}</strong>
-                      <span>{formatLocalTime(notification.createdAt)} · preview only</span>
+                      <strong>{entry.requestedTime}</strong>
+                      <span>{entry.partySize} guests · {entry.section || 'either'} · {entry.note || 'Requested exact slot'}</span>
                     </div>
-                    <span className="status-pill">{statusLabel(notification.status)}</span>
+                    <div className="operator-tags" aria-label="Notify service notes">
+                      <span>Notify</span>
+                      <span>{entry.section || 'either'}</span>
+                      <span>{entry.partySize} top</span>
+                      <span>{entry.availableCountAtRequest > 0 ? 'Alternates found' : 'No exact table'}</span>
+                    </div>
+                    <span className="status-pill">{statusLabel(entry.status)}</span>
+                    <div className="operator-actions">
+                      <button disabled={busy || notifyBusy || entry.status === 'notified'} onClick={() => updateNotifyStatus(entry, 'notified')}>Mark notified</button>
+                      <button disabled={busy || notifyBusy} onClick={() => updateNotifyStatus(entry, 'booked')}>Mark booked</button>
+                      <button disabled={busy || notifyBusy} onClick={() => updateNotifyStatus(entry, 'cancelled')}>Cancel</button>
+                    </div>
                   </article>
                 ))}
                 {visibleBookings.map(booking => (
