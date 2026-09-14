@@ -17,9 +17,9 @@
 The demo implements a synthetic, one-restaurant reservation system:
 
 - Public homepage with Guantonio visual style and a replacement reservation CTA.
-- Guest search, hold, confirm, manage, change, and cancel flow.
-- Protected iPad sized operator view for check in, seating, finishing, cancellation, floor snapshot, recent holds, and reset.
-- Disabled notification adapter with preview records only.
+- Guest search, hold, confirm, manage, change, cancel, and consented Notify request flow for unavailable exact times.
+- Protected iPad sized operator view for check in, seating, finishing, cancellation, Notify requests, floor snapshot, waitlist, Texts readiness, recent holds, and reset.
+- SMS consent proof pages and a disabled notification adapter with preview records only.
 - No Resy write, SMS, email, payment, or real reservation side effects.
 
 ## Local validation, September 10, 2026
@@ -66,7 +66,7 @@ Passing checks on `https://res.beareberly.com`:
 ## Supabase isolation evidence
 
 - Demo data lives in private schema `reservation_demo` in project `tcrbfctksulrwudfmxiv`.
-- The migration creates demo-only tables for venue, tables, service days, holds, bookings, allocations, idempotency attempts, notification previews, and audit events.
+- The migrations create demo-only tables for venue, tables, service days, holds, bookings, allocations, idempotency attempts, Notify requests, notification previews, waitlist, guest profiles, table blocks, pacing, service stages, and audit events.
 - Row level security is enabled on demo tables, and direct grants to `public`, `anon`, and `authenticated` are revoked.
 - Browser traffic reaches demo data only through Cloudflare Pages Functions calling narrow Supabase RPCs with a server-held demo secret.
 - Direct anonymous REST read against `reservation_demo.bookings` was rejected with HTTP `406` during local and live API regression.
@@ -90,7 +90,7 @@ Before this can replace Resy in production, the restaurant still needs:
 - Real venue schedule, table inventory, party-size rules, turn times, closures, and exceptions.
 - Staff authentication and role policy beyond the demo passcode.
 - Production guest data retention, privacy policy, audit review, and support workflow.
-- SMS provider setup, toll-free or local number registration, consent language, opt-out handling, and inbound cancellation rules.
+- SMS campaign resubmission, carrier approval, controlled test activation, opt-out handling, and inbound cancellation rules.
 - Monitoring, alerting, backups, export, and operational runbook.
 - Controlled cutover plan so Resy and the replacement do not accept conflicting live reservations.
 
