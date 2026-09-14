@@ -444,6 +444,10 @@ test('operator can load and update a guestbook profile on the iPad', async ({ pa
   await expect(page.getByText(/Updated Guestbook Tester's guest profile/i)).toBeVisible();
   await expect(page.getByLabel('Guest profile tags')).toHaveValue('VIP, Patio');
   await expect(page.getByLabel('Guest profile preferences')).toHaveValue('Sparkling water, corner table');
+  const selectedPartyPanel = page.locator('.selected-party-panel');
+  await expect(selectedPartyPanel.getByLabel('Selected party service intelligence')).toContainText('Service plan');
+  await expect(selectedPartyPanel.getByLabel('Guest intelligence')).toContainText('Sparkling water, corner table');
+  await expect(selectedPartyPanel.getByLabel('Guest intelligence')).toContainText('Knows the owner. Keep notes private.');
   await page.getByLabel('Operator sections').getByRole('button', { name: /^Guests$/i }).click();
   await expect(page.getByLabel('Guestbook profiles')).toContainText('Guestbook Tester');
   await expect(page.getByLabel('Guestbook profiles')).toContainText('VIP');

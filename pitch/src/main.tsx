@@ -834,6 +834,25 @@ function OperatorPage() {
   ] as const;
   const bookingsByTable = new Map(activeBookings.flatMap(booking => (booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : []).map(code => [code, booking] as const)));
   const tableBlocksByTable = new Map(tableBlocks.filter(block => block.status === 'active').map(block => [block.tableCode, block]));
+  const selectedTableCodes = selectedBooking ? (selectedBooking.tableCodes?.length ? selectedBooking.tableCodes : selectedBooking.tableCode ? [selectedBooking.tableCode] : []) : [];
+  const selectedDisplayTable = selectedBooking?.tableCode || (selectedTableCodes.length ? selectedTableCodes.join('+') : 'pending');
+  const selectedTurnMinutes = selectedBooking ? Math.round(Math.max(0, new Date(selectedBooking.endsAt).getTime() - new Date(selectedBooking.startsAt).getTime()) / 60000) : 0;
+  const selectedTableBlock = selectedTableCodes.map(code => tableBlocksByTable.get(code)).find(Boolean);
+  const selectedServiceAction = selectedBooking ? (
+    selectedBooking.status === 'confirmed'
+      ? { label: 'Next: check in', detail: 'Greet the party, confirm guest notes, then check in before seating.' }
+      : selectedBooking.status === 'checked_in'
+        ? { label: 'Next: seat party', detail: selectedTableCodes.length ? `Seat at ${selectedDisplayTable} or move to another open table.` : 'Tap an open compatible table from the floor map.' }
+        : selectedBooking.status === 'seated'
+          ? { label: 'Watch turn', detail: `${selectedTurnMinutes || 90} minute turn. Finish when the table is clear.` }
+          : selectedBooking.status === 'completed'
+            ? { label: 'Turn complete', detail: 'Table is closed out for this synthetic service.' }
+            : { label: 'No active action', detail: 'This party is cancelled or inactive.' }
+  ) : null;
+  const selectedPreferenceTags = selectedBookingProfile?.preferences?.length ? selectedBookingProfile.preferences : selectedBooking?.guestPreferences || [];
+  const selectedProfileTags = selectedBookingProfile?.tags?.length ? selectedBookingProfile.tags : selectedBooking?.guestTags || [];
+  const selectedPrivateNote = selectedBookingProfile?.privateNote || selectedBooking?.privateNotePreview || '';
+  const selectedRecentVisits = selectedBookingProfile?.visits?.slice(0, 3) || [];
   const queueMatches = (booking: ReservationSummary & { tableCode?: string; createdAt?: string }) => {
     if (queueFilter === 'Notify' || queueFilter === 'Waitlist') return false;
     if (queueFilter === 'Booked') return booking.status === 'confirmed';
@@ -2095,6 +2114,52 @@ function OperatorPage() {
                   </div>
                 </section>
               )}
+              {selectedBooking && (
+                <section aria-labelledby="selected-party-title" className={`selected-party-panel ${movingReference === selectedBooking.reference ? 'move-mode' : ''}`}>
+                  <h2 id="selected-party-title">Selected party</h2>
+                  <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
+                  <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedDisplayTable} · {statusLabel(selectedBooking.status)}</p>
+                  <div className="profile-chip-row" aria-label="Selected guest quick tags">
+                    {(selectedProfileTags.length ? selectedProfileTags.slice(0, 4) : [selectedBooking.visitCount && selectedBooking.visitCount > 1 ? `${selectedBooking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
+                  </div>
+                  <div className="guest-intel-card" aria-label="Guest intelligence">
+                    <div>
+                      <span>{selectedBookingProfile ? `${selectedBookingProfile.visitCount} ${selectedBookingProfile.visitCount === 1 ? 'visit' : 'visits'}` : 'Guest intelligence'}</span>
+                      <strong>{selectedPreferenceTags.length ? selectedPreferenceTags.join(', ') : 'No saved preferences yet'}</strong>
+                    </div>
+                    {selectedPrivateNote ? <p>{selectedPrivateNote}</p> : <p>Add profile notes for allergies, regular preferences, VIP handling, or seating requests.</p>}
+                    {selectedRecentVisits.length > 0 && (
+                      <div className="mini-visit-list" aria-label="Selected guest recent visits">
+                        {selectedRecentVisits.map(visit => <span key={visit.reference}>{visit.reference} · {formatLocalTime(visit.startsAt)} · {visit.tableCode || 'pending'} · {statusLabel(visit.status)}</span>)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="service-intel-grid" aria-label="Selected party service intelligence">
+                    <article>
+                      <span>Service plan</span>
+                      <strong>{selectedServiceAction?.label}</strong>
+                      <p>{selectedServiceAction?.detail}</p>
+                    </article>
+                    <article>
+                      <span>Turn window</span>
+                      <strong>{formatLocalTime(selectedBooking.startsAt)} to {formatLocalTime(selectedBooking.endsAt)}</strong>
+                      <p>{selectedTurnMinutes || 90} min · {selectedBooking.section === 'indoor' ? 'Dining room' : 'Patio'} pacing</p>
+                    </article>
+                    <article>
+                      <span>Table status</span>
+                      <strong>{selectedTableBlock ? 'Blocked' : selectedTableCodes.length ? selectedDisplayTable : 'Unassigned'}</strong>
+                      <p>{selectedTableBlock ? selectedTableBlock.reason : selectedTableCodes.length ? 'Assigned on the floor map.' : 'Seat from floor or timeline.'}</p>
+                    </article>
+                  </div>
+                  <div className="side-actions">
+                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
+                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
+                    <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
+                    <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
+                  </div>
+                  {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
+                </section>
+              )}
               <section aria-labelledby="floor-title">
                 <h2 id="floor-title">Floor snapshot</h2>
                 <p>Spatial map mirrors the service queue: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
@@ -2115,30 +2180,7 @@ function OperatorPage() {
                   {floorAction === 'combine' && <p className="move-hint">Choose a combination below, or tap a highlighted member table to find its combinations.</p>}
                 </div>
               </section>
-              {selectedBooking && (
-                <section aria-labelledby="selected-party-title" className={`selected-party-panel ${movingReference === selectedBooking.reference ? 'move-mode' : ''}`}>
-                  <h2 id="selected-party-title">Selected party</h2>
-                  <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
-                  <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
-                  <div className="profile-chip-row" aria-label="Selected guest quick tags">
-                    {(selectedBooking.guestTags?.length ? selectedBooking.guestTags.slice(0, 3) : [selectedBooking.visitCount && selectedBooking.visitCount > 1 ? `${selectedBooking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
-                  </div>
-                  {selectedBookingProfile && (
-                    <div className="profile-mini-card">
-                      <span>{selectedBookingProfile.visitCount} {selectedBookingProfile.visitCount === 1 ? 'visit' : 'visits'}</span>
-                      <strong>{selectedBookingProfile.tags.join(', ') || 'Guest profile'}</strong>
-                      {selectedBookingProfile.privateNote && <p>{selectedBookingProfile.privateNote}</p>}
-                    </div>
-                  )}
-                  <div className="side-actions">
-                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
-                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
-                    <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
-                    <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
-                  </div>
-                  {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
-                </section>
-              )}
+
 
               {selectedWaitlistEntry && (
                 <section aria-labelledby="selected-waitlist-title" className="selected-party-panel waitlist-selected move-mode">
