@@ -22,7 +22,7 @@ The operator passcode is intentionally not committed to Git and should not be pa
 1. Open the operator URL on the iPad.
 2. Enter the operator passcode.
 3. Tap `Open operator view`.
-4. Use `Check in`, `Seat`, `Move table`, `Finish`, or `Cancel` to rehearse reservation service flow.
+4. Use `Check in`, `Seat`, `Move table`, manual service-stage buttons, `Finish`, or `Cancel` to rehearse reservation service flow.
 5. Use the `Wait` rail to add a walk-in, notify the party, and seat it from the floor map.
 6. Use `Reset demo data` before a new pitch run.
 
