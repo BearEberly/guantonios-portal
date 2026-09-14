@@ -2423,6 +2423,37 @@ button.timeline-cell:hover,
 .availability-grid strong { font-size: 42px; line-height: .95; }
 .availability-grid small { color: #9da8b2; font-size: 12px; font-weight: 850; }
 
+.availability-section-pills {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.availability-section-pills span {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid #33404b;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.availability-section-pills span.open {
+  border-color: rgba(56, 217, 150, .7);
+  background: rgba(56, 217, 150, .12);
+  color: #b9f8dd;
+}
+
+.availability-section-pills span.closed {
+  border-color: #33404b;
+  background: #10171e;
+  color: #64717d;
+}
+
 .cover-ticker {
   min-height: 52px;
   display: grid;

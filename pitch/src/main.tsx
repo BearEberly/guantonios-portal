@@ -419,6 +419,15 @@ function ManagePage() {
 
 type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Texts' | 'Reports';
 type OperatorMode = 'floor' | 'timeline' | 'availability' | 'reports';
+type AvailabilityMatrixRow = {
+  slot: string;
+  time: string;
+  available: boolean;
+  indoor: boolean;
+  outdoor: boolean;
+  sections: SeatingSection[];
+  reason: string;
+};
 
 function dateKeyFromTimestamp(value: string) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -478,6 +487,9 @@ function OperatorPage() {
   const [bookSlots, setBookSlots] = useState<AvailabilitySlot[]>([]);
   const [bookStatus, setBookStatus] = useState('Search live demo availability before booking from the iPad.');
   const [bookBusy, setBookBusy] = useState(false);
+  const [availabilityRows, setAvailabilityRows] = useState<AvailabilityMatrixRow[]>([]);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [availabilityStatus, setAvailabilityStatus] = useState('Live availability will refresh after the operator view loads.');
   const [selectedWaitlistId, setSelectedWaitlistId] = useState<string | null>(null);
   const [waitGuestName, setWaitGuestName] = useState('Walk-in Guest');
   const [waitContact, setWaitContact] = useState('(209) 555-0101');
@@ -896,6 +908,27 @@ function OperatorPage() {
   ];
   const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
   const timeSlotKeys = timeSlots.map((_, index) => `${String(17 + Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`);
+  const availabilityPartySize = explicitSelectedBooking?.partySize || selectedWaitlistEntry?.partySize || (typeof partySizeFilter === 'number' ? partySizeFilter : partySizeFilter === '7+' ? 7 : bookPartySize || 2);
+  const partyContextLabel = operatorMode === 'availability'
+    ? `Showing ${availabilityPartySize} tops`
+    : partySizeFilter
+      ? `Showing ${partySizeFilter} tops`
+      : 'Group By';
+  const operatorViewLabel = operatorMode === 'availability'
+    ? 'Availability Board'
+    : operatorMode === 'timeline'
+      ? 'Timeline'
+      : operatorMode === 'reports'
+        ? 'Daily Report'
+        : activeRail === 'Book'
+          ? 'Book Rail'
+          : activeRail === 'Wait'
+            ? 'Wait Rail'
+            : activeRail === 'Guests'
+              ? 'Guestbook'
+              : activeRail === 'Texts'
+                ? 'Texts Rail'
+                : 'Floor Plan';
   const timelineGridTemplate = `96px repeat(${timeSlots.length}, minmax(76px, 1fr))`;
   const nonCancelledBookings = bookings.filter(booking => booking.status !== 'cancelled');
   const reportCovers = nonCancelledBookings.reduce((total, booking) => total + booking.partySize, 0);
@@ -972,6 +1005,43 @@ function OperatorPage() {
       .reduce((total, booking) => total + booking.partySize, 0);
     return { slot, time: slotTime, covers, remaining: Math.max(0, servicePacingLimit - covers) };
   });
+  useEffect(() => {
+    if (!state) return;
+    let cancelled = false;
+    async function refreshAvailability() {
+      setAvailabilityBusy(true);
+      setAvailabilityStatus(`Checking live inventory for ${availabilityPartySize}-tops.`);
+      try {
+        const rows = await Promise.all(timeSlotKeys.map(async (time, index) => {
+          const result = await searchAvailability({ date: selectedServiceDate, time, partySize: availabilityPartySize });
+          const exact = (result.slots || []).find(slot => slot.exact && slot.time === time) || null;
+          const sections = (exact?.seating || []).map(choice => choice.section);
+          return {
+            slot: timeSlots[index],
+            time,
+            available: sections.length > 0,
+            indoor: sections.includes('indoor'),
+            outdoor: sections.includes('outdoor'),
+            sections,
+            reason: exact ? 'open' : result.available ? 'nearby_only' : result.reason || 'sold_out'
+          };
+        }));
+        if (!cancelled) {
+          setAvailabilityRows(rows);
+          setAvailabilityStatus(`Live availability checked for ${availabilityPartySize}-tops.`);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAvailabilityRows([]);
+          setAvailabilityStatus(`Live availability failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+        }
+      } finally {
+        if (!cancelled) setAvailabilityBusy(false);
+      }
+    }
+    refreshAvailability();
+    return () => { cancelled = true; };
+  }, [state, selectedServiceDate, availabilityPartySize]);
   const reportPacingRows = timeSlots.map((slot, index) => {
     const slotData = capacityBySlot[index];
     const state = slotData.covers >= 10 ? 'full' : slotData.covers >= 8 ? 'tight' : slotData.covers > 0 ? 'paced' : 'open';
@@ -1405,7 +1475,7 @@ function OperatorPage() {
                   {size}
                 </button>
               ))}
-              <p>{partySizeFilter ? `Showing ${partySizeFilter} tops` : 'Group By'}: <strong>Floor Plan</strong></p>
+              <p>{partyContextLabel}: <strong>{operatorViewLabel}</strong></p>
             </div>
             <section className="service-strip" aria-label="Service summary">
               <article><span>Dine-in covers</span><strong>{activeCount}</strong></article>
@@ -1900,15 +1970,19 @@ function OperatorPage() {
                   <section className="availability-board" aria-label="Availability by service time">
                     <div className="timeline-board-head">
                       <h2>Availability</h2>
-                      <span>{selectedServiceLabel} dinner capacity by half hour</span>
+                      <span>{selectedServiceLabel} dinner · live search for {availabilityPartySize}-tops · {availabilityBusy ? 'checking' : availabilityStatus}</span>
                     </div>
                     <div className="availability-grid">
-                      {capacityBySlot.map(slot => (
-                        <article key={slot.slot} className={slot.remaining === 0 ? 'full' : ''}>
+                      {(availabilityRows.length ? availabilityRows : capacityBySlot.map(slot => ({ slot: slot.slot, time: slot.time, available: slot.remaining > 0, indoor: false, outdoor: false, sections: [] as SeatingSection[], reason: 'checking' }))).map(slot => (
+                        <article key={slot.slot} className={!slot.available ? 'full' : ''}>
                           <span>{slot.slot}</span>
-                          <strong>{slot.remaining}</strong>
-                          <small>{slot.covers}/10 covers</small>
-                          <button type="button" disabled={slot.remaining === 0} onClick={() => seedOperatorBook(slot.time)}>Book this time</button>
+                          <strong>{slot.available ? slot.sections.length : 0}</strong>
+                          <small>{availabilityBusy ? 'Checking live inventory' : slot.available ? `${slot.sections.map(section => section === 'indoor' ? 'Indoor' : 'Patio').join(' + ')} exact` : slot.reason === 'nearby_only' ? 'Nearby times only' : 'No exact table'}</small>
+                          <div className="availability-section-pills" aria-label={`${slot.slot} seating availability`}>
+                            <span className={slot.indoor ? 'open' : 'closed'}>Indoor</span>
+                            <span className={slot.outdoor ? 'open' : 'closed'}>Patio</span>
+                          </div>
+                          <button type="button" disabled={availabilityBusy || !slot.available} onClick={() => seedOperatorBook(slot.time, slot.indoor ? 'indoor' : 'outdoor', availabilityPartySize)}>Book this time</button>
                         </article>
                       ))}
                     </div>

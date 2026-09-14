@@ -153,6 +153,30 @@ test('operator Texts rail shows SMS readiness, templates, and preview history', 
   await expect(page.getByLabel('Notification preview history')).toContainText(/preview only/i);
 });
 
+test('operator Availability board uses live exact inventory for the selected party size', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  await createConfirmedDemoBooking(request, { guestLabel: `Availability Guest ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Party size filters').getByRole('button', { name: '7+' }).click();
+  await page.getByLabel('View controls').getByRole('button', { name: /^Availability$/i }).click();
+
+  const board = page.getByLabel('Availability by service time');
+  await expect(board).toBeVisible();
+  await expect(board).toContainText(/live search for 7-tops/i);
+  await expect(board).toContainText(/No exact table|Nearby times only/i);
+  await expect(board.getByRole('button', { name: /Book this time/i }).first()).toBeDisabled();
+
+  await page.getByLabel('Party size filters').getByRole('button', { name: /^2$/ }).click();
+  await expect(board).toContainText(/live search for 2-tops/i);
+  const openSlot = board.locator('article').filter({ hasText: /Indoor exact|Patio exact|Indoor \+ Patio exact/i }).first();
+  await expect(openSlot).toBeVisible();
+  await expect(openSlot.getByRole('button', { name: /Book this time/i })).toBeEnabled();
+});
+
 test('operator can seat a selected party by tapping an open floor table', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
