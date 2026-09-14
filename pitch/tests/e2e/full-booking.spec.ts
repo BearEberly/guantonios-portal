@@ -272,6 +272,106 @@ test('operator can triage arrivals from the iPad queue', async ({ page, request 
   await expect(reservationRow(page, here.reference)).toBeVisible();
 });
 
+test('operator sync panel shows live counts and pending iPad saves', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Sync Panel ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, booking.date);
+
+  const syncPanel = page.getByLabel('Operator sync status');
+  await expect(syncPanel).toBeVisible();
+  await expect(syncPanel).toContainText('Live');
+  await expect(syncPanel).toContainText(/Synced \d{1,2}:\d{2}:\d{2}/);
+  await expect(syncPanel).toContainText('1 bookings');
+
+  await page.route('**/api/demo/operator/status', async route => {
+    await new Promise(resolve => setTimeout(resolve, 450));
+    await route.continue();
+  });
+
+  const row = reservationRow(page, booking.reference);
+  await row.getByRole('button', { name: /^Check in$/ }).click();
+  await expect(syncPanel).toContainText('Saving');
+  await expect(syncPanel).toContainText(`Saving ${booking.reference} as Checked in.`);
+  await expect(syncPanel).toContainText('Live', { timeout: 10000 });
+  await expect(syncPanel).toContainText(/Synced \d{1,2}:\d{2}:\d{2}/);
+  await expect(reservationRow(page, booking.reference)).toContainText('Checked in');
+});
+
+test('operator host briefing ranks next iPad actions', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const stamp = Date.now();
+  const late = await createConfirmedDemoBooking(request, { guestLabel: `Late Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '19:00' });
+  const here = await createConfirmedDemoBooking(request, { guestLabel: `Here Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '20:00' });
+  const turn = await createConfirmedDemoBooking(request, { guestLabel: `Turn Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '17:30' });
+  await apiPost(request, '/api/demo/operator/status', { reference: here.reference, status: 'checked_in' });
+  await apiPost(request, '/api/demo/operator/status', { reference: turn.reference, status: 'seated', tableCode: 'P2' });
+  await apiPost(request, '/api/demo/operator/service', { reference: turn.reference, serviceStage: 'paid' });
+  await apiPost(request, '/api/demo/operator/pacing', { op: 'set', date: late.date, time: '19:30', maxCovers: 4, reason: 'Host briefing pacing cap.' });
+  await page.clock.setFixedTime(new Date(new Date(late.startsAt).getTime() + 20 * 60 * 1000));
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, late.date);
+
+  const briefing = page.getByLabel('Host briefing');
+  await expect(briefing).toBeVisible();
+  await expect(briefing).toContainText('Late arrival needs attention');
+  await expect(briefing).toContainText('Late Briefing is late');
+  await expect(briefing).toContainText('Seat Here Briefing');
+  await expect(briefing).toContainText('Ready to turn at P2');
+  await expect(briefing).toContainText('7:30 pacing cap');
+
+  await briefing.getByRole('button', { name: /Seat now: Seat Here Briefing/i }).click();
+  await expect(page.getByText(new RegExp(`Moving ${escapeRegex(here.reference)}`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText('Here Briefing');
+
+  await briefing.getByRole('button', { name: /Review late: Late Briefing is late/i }).click();
+  await expect(reservationRow(page, late.reference)).toBeVisible();
+  await expect(reservationRow(page, here.reference)).toHaveCount(0);
+  await expect(page.locator('.selected-party-panel')).toContainText('Late Briefing');
+});
+
+test('operator can start a booking from an open Timeline table cell', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+
+  const timeline = page.getByLabel('Table lane reservation book');
+  await expect(timeline).toBeVisible();
+  await page.getByRole('button', { name: /^Book table 12 at 5:00$/i }).click();
+
+  await expect(page.getByLabel('Book from operator iPad')).toBeVisible();
+  await expect(page.getByLabel('Operator booking source')).toContainText('Timeline · table 12 · 5:00');
+  await expect(page.getByText(/Ready to book 2 guests at 5:00 from table 12/i)).toBeVisible();
+  const bookingResults = page.getByLabel('Operator booking availability');
+  await expect(bookingResults.getByRole('button', { name: /Book Indoor at 5:00/i }).first()).toBeVisible();
+
+  await page.getByLabel('Operator guest name').fill('Timeline Cell Guest');
+  await bookingResults.getByRole('button', { name: /Book Indoor at 5:00/i }).first().click();
+  const bookedMessage = page.getByText(/Booked DEMO-/).last();
+  await expect(bookedMessage).toBeVisible();
+  const statusText = await bookedMessage.innerText();
+  const reference = statusText.match(/Booked (DEMO-[A-Z0-9]+)/)?.[1];
+  expect(reference).toBeTruthy();
+  await expect(page.locator('.operator-row').filter({ hasText: 'Timeline Cell Guest' })).toBeVisible();
+
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  const table12Row = page.locator('.timeline-table-row').filter({ has: page.getByRole('button', { name: /Timeline table 12/i }) });
+  await expect(table12Row.locator('.timeline-reservation-card').filter({ hasText: reference! })).toBeVisible();
+  await expect(table12Row.locator('.timeline-reservation-card').filter({ hasText: 'Timeline Cell Guest' })).toBeVisible();
+});
+
 test('operator can pace a service slot and restore exact availability', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
@@ -791,8 +891,9 @@ test('operator can create and seat a booking from the iPad Book rail', async ({ 
   await expect(page.getByLabel('Operator booking availability').getByRole('button', { name: /Book Outdoor/i }).first()).toBeVisible();
   await page.getByLabel('Operator booking availability').getByRole('button', { name: /Book Outdoor/i }).first().click();
 
-  await expect(page.getByText(/Booked DEMO-/)).toBeVisible();
-  const statusText = await page.locator('.resyos-live-status').innerText();
+  const bookedMessage = page.getByText(/Booked DEMO-/).last();
+  await expect(bookedMessage).toBeVisible();
+  const statusText = await bookedMessage.innerText();
   const reference = statusText.match(/Booked (DEMO-[A-Z0-9]+)/)?.[1];
   expect(reference).toBeTruthy();
   await expect(page.locator('.operator-row').filter({ hasText: reference! })).toBeVisible();

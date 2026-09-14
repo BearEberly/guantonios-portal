@@ -562,6 +562,23 @@ type ArrivalStateKey = 'early' | 'due' | 'late' | 'arrived' | 'seated' | 'done' 
 
 type ArrivalState = { key: ArrivalStateKey; label: string; detail: string };
 
+type OperatorSyncState = 'idle' | 'refreshing' | 'saving' | 'error';
+type OperatorBookSource = {
+  tone: 'availability' | 'timeline' | 'manual';
+  label: string;
+  detail: string;
+  targetTableCode?: string;
+} | null;
+
+function formatSyncTime(value: number | null) {
+  if (!value) return 'No successful sync yet';
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit'
+  }).format(new Date(value));
+}
+
 function arrivalStateForBooking(booking?: ReservationSummary | null, nowMs = Date.now()): ArrivalState {
   if (!booking) return { key: 'due', label: 'Due', detail: 'No party selected' };
   if (booking.status === 'cancelled') return { key: 'cancelled', label: 'Cancelled', detail: 'Inactive party' };
@@ -666,6 +683,7 @@ function OperatorPage() {
   const [bookNote, setBookNote] = useState('Booked from the operator iPad demo.');
   const [bookSlots, setBookSlots] = useState<AvailabilitySlot[]>([]);
   const [bookStatus, setBookStatus] = useState('Search live demo availability before booking from the iPad.');
+  const [bookSource, setBookSource] = useState<OperatorBookSource>(null);
   const [bookBusy, setBookBusy] = useState(false);
   const [availabilityRows, setAvailabilityRows] = useState<AvailabilityMatrixRow[]>([]);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
@@ -703,10 +721,26 @@ function OperatorPage() {
   const [detailContact, setDetailContact] = useState('');
   const [detailNote, setDetailNote] = useState('');
   const [profileDraftForId, setProfileDraftForId] = useState<string | null>(null);
+  const [lastSyncAtMs, setLastSyncAtMs] = useState<number | null>(null);
+  const [syncState, setSyncState] = useState<OperatorSyncState>('idle');
+  const [syncMessage, setSyncMessage] = useState('No successful sync yet.');
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
 
-  async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
+  function markSyncSaving(message: string) {
+    setSyncState('saving');
+    setSyncMessage(message);
+  }
+
+  async function load(
+    event?: FormEvent,
+    loadedStatus = 'Operator view loaded from Supabase demo data.',
+    syncMessageText = 'Refreshing live service data from Supabase.',
+    syncPhase: Extract<OperatorSyncState, 'refreshing' | 'saving'> = 'refreshing'
+  ) {
     event?.preventDefault();
     setBusy(true);
+    setSyncState(syncPhase);
+    setSyncMessage(syncMessageText);
     try {
       let result: OperatorState | null = null;
       let lastError: unknown = null;
@@ -731,9 +765,15 @@ function OperatorPage() {
       } catch (error) {
         setSmsReadiness({ ok: false, error: error instanceof Error ? error.message : 'SMS readiness unavailable' });
       }
+      setLastSyncAtMs(Date.now());
+      setSyncState('idle');
+      setSyncMessage(loadedStatus);
       setStatus(loadedStatus);
     } catch (error) {
-      setStatus(`Operator access failed: ${error instanceof Error ? error.message : 'Check passcode.'}`);
+      const failure = `Operator access failed: ${error instanceof Error ? error.message : 'Check passcode.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setBusy(false);
     }
@@ -741,6 +781,7 @@ function OperatorPage() {
 
   async function setBookingStatus(reference: string, nextStatus: string, tableCode?: string) {
     setBusy(true);
+    markSyncSaving(tableCode ? `Saving ${reference} at table ${tableCode}.` : `Saving ${reference} as ${statusLabel(nextStatus)}.`);
     try {
       const result = await operatorStatus(token, reference, nextStatus, tableCode);
       if (!result.ok) throw new Error(result.error || 'Operator update failed');
@@ -748,10 +789,18 @@ function OperatorPage() {
       if (nextStatus === 'seated') setQueueFilter('Seated');
       if (nextStatus === 'completed') setQueueFilter('Done');
       if (nextStatus === 'cancelled') setQueueFilter('No-show');
-      await load(undefined, tableCode ? `Seated ${reference} at table ${tableCode}.` : `Updated ${reference} to ${statusLabel(nextStatus)}.`);
+      await load(
+        undefined,
+        tableCode ? `Seated ${reference} at table ${tableCode}.` : `Updated ${reference} to ${statusLabel(nextStatus)}.`,
+        tableCode ? `Saving ${reference} at table ${tableCode}.` : `Saving ${reference} as ${statusLabel(nextStatus)}.`,
+        'saving'
+      );
       return true;
     } catch (error) {
-      setStatus(`Update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
       setBusy(false);
       return false;
     }
@@ -759,14 +808,23 @@ function OperatorPage() {
 
   async function updateServiceStage(reference: string, nextStage: ServiceStage) {
     setServiceBusy(true);
+    markSyncSaving(`Saving ${reference} service stage as ${serviceStageLabel(nextStage)}.`);
     try {
       const result = await operatorService(token, { reference, serviceStage: nextStage });
       if (!result.ok) throw new Error(result.error || 'Service stage update failed');
       selectReservation(reference);
-      await load(undefined, `Updated ${reference} service stage to ${serviceStageLabel(nextStage)}.`);
+      await load(
+        undefined,
+        `Updated ${reference} service stage to ${serviceStageLabel(nextStage)}.`,
+        `Saving ${reference} service stage as ${serviceStageLabel(nextStage)}.`,
+        'saving'
+      );
       return true;
     } catch (error) {
-      setStatus(`Service stage update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Service stage update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
       return false;
     } finally {
       setServiceBusy(false);
@@ -777,6 +835,7 @@ function OperatorPage() {
     event.preventDefault();
     if (!selectedBooking) return;
     setDetailBusy(true);
+    markSyncSaving(`Saving ${selectedBooking.reference} details from the iPad drawer.`);
     try {
       const result = await operatorEdit(token, {
         reference: selectedBooking.reference,
@@ -795,10 +854,18 @@ function OperatorPage() {
       setFloorFocusTime(detailTime);
       selectReservation(selectedBooking.reference);
       setDetailDraftForReference(null);
-      await load(undefined, `Updated ${selectedBooking.reference} details from the iPad drawer.`);
+      await load(
+        undefined,
+        `Updated ${selectedBooking.reference} details from the iPad drawer.`,
+        `Saving ${selectedBooking.reference} details from the iPad drawer.`,
+        'saving'
+      );
       return true;
     } catch (error) {
-      setStatus(`Reservation detail update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Reservation detail update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
       return false;
     } finally {
       setDetailBusy(false);
@@ -808,6 +875,7 @@ function OperatorPage() {
   async function resetDemo() {
     if (!window.confirm('Reset all synthetic demo reservations?')) return;
     setBusy(true);
+    markSyncSaving('Resetting synthetic demo data.');
     try {
       await operatorReset(token);
       setSelectedReference(null);
@@ -817,9 +885,12 @@ function OperatorPage() {
       setDetailDraftForReference(null);
       setFloorAction('seat');
       setQueueFilter('All');
-      await load(undefined, 'Synthetic demo data reset.');
+      await load(undefined, 'Synthetic demo data reset.', 'Resetting synthetic demo data.', 'saving');
     } catch (error) {
-      setStatus(`Reset failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Reset failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
       setBusy(false);
     }
   }
@@ -830,6 +901,7 @@ function OperatorPage() {
     setBookDate(nextDate);
     setWaitDate(nextDate);
     setBookSlots([]);
+    setBookSource(null);
     setSelectedReference(null);
     setSelectedWaitlistId(null);
     setDetailDraftForReference(null);
@@ -849,6 +921,7 @@ function OperatorPage() {
     event?.preventDefault();
     setBookBusy(true);
     setBookStatus('Searching current demo availability...');
+    setBookSource(null);
     try {
       const result = await searchAvailability({ date: bookDate, time: bookTime, partySize: bookPartySize, ...(bookSection === 'either' ? {} : { section: bookSection }) });
       if (!result.ok) throw new Error(result.error || 'Search failed');
@@ -871,6 +944,7 @@ function OperatorPage() {
     setBookBusy(true);
     setStatus(`Holding ${slot.displayTime} ${section} for ${bookPartySize}.`);
     setBookStatus(`Holding ${slot.displayTime} ${section} for ${bookPartySize}.`);
+    markSyncSaving(`Holding ${slot.displayTime} ${section} for ${bookPartySize}.`);
     try {
       const hold = await createHold({ date: slot.date, time: slot.time, partySize: bookPartySize, section, idempotencyKey: makeIdempotencyKey('operator_hold') });
       if (!hold.ok || !hold.holdId || !hold.holdToken) throw new Error(hold.error || 'Hold failed');
@@ -886,6 +960,18 @@ function OperatorPage() {
         request: bookNote || 'Booked from the operator iPad demo.'
       });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Confirm failed');
+      const targetTableCode = bookSource?.tone === 'timeline' ? bookSource.targetTableCode : null;
+      let bookedTableCode: string | null = null;
+      let assignmentWarning = '';
+      if (targetTableCode) {
+        try {
+          const assignment = await operatorStatus(token, result.reference, 'confirmed', targetTableCode);
+          if (!assignment.ok) throw new Error(assignment.error || 'Table assignment failed');
+          bookedTableCode = assignment.tableCode || targetTableCode;
+        } catch (assignmentError) {
+          assignmentWarning = ` Table ${targetTableCode} assignment failed: ${assignmentError instanceof Error ? assignmentError.message : 'try again from the floor.'}`;
+        }
+      }
       setSelectedServiceDate(slot.date);
       setBookDate(slot.date);
       setWaitDate(slot.date);
@@ -903,11 +989,16 @@ function OperatorPage() {
       setOperatorMode('floor');
       setActiveRail('Floor');
       setBookSlots([]);
-      setBookStatus(`Booked ${result.reference} for ${bookPartySize} at ${slot.displayTime}.`);
-      await load(undefined, `Booked ${result.reference} for ${bookPartySize} at ${slot.displayTime}.`);
+      setBookSource(null);
+      const tableCopy = bookedTableCode ? ` at table ${bookedTableCode}` : '';
+      const successMessage = `Booked ${result.reference} for ${bookPartySize} at ${slot.displayTime}${tableCopy}.${assignmentWarning}`;
+      setBookStatus(successMessage);
+      await load(undefined, successMessage, `Saving ${result.reference} into the live service.`, 'saving');
     } catch (error) {
       const message = `Book failed: ${error instanceof Error ? error.message : 'Try again.'}`;
       setBookStatus(message);
+      setSyncState('error');
+      setSyncMessage(message);
       setStatus(message);
     } finally {
       setBookBusy(false);
@@ -919,6 +1010,7 @@ function OperatorPage() {
     setWaitBusy(true);
     const message = `Adding ${waitPartySize}-top to the waitlist.`;
     setStatus(message);
+    markSyncSaving(message);
     try {
       const result = await operatorWaitlist(token, {
         op: 'create',
@@ -938,9 +1030,12 @@ function OperatorPage() {
       setQueueFilter('Waitlist');
       setActiveRail('Wait');
       setOperatorMode('floor');
-      await load(undefined, `Added ${result.entry?.guestLabel || waitGuestName} to the waitlist for ${waitPartySize}.`);
+      await load(undefined, `Added ${result.entry?.guestLabel || waitGuestName} to the waitlist for ${waitPartySize}.`, message, 'saving');
     } catch (error) {
-      setStatus(`Waitlist add failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Waitlist add failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setWaitBusy(false);
     }
@@ -948,13 +1043,17 @@ function OperatorPage() {
 
   async function updateWaitlistStatus(entry: WaitlistEntry, nextStatus: 'waiting' | 'notified' | 'cancelled') {
     setWaitBusy(true);
+    markSyncSaving(`Saving ${entry.guestLabel} as ${statusLabel(nextStatus)} on the waitlist.`);
     try {
       const result = await operatorWaitlist(token, { op: 'status', waitlistId: entry.id, status: nextStatus });
       if (!result.ok) throw new Error(result.error || 'Waitlist update failed');
       if (nextStatus === 'cancelled') setSelectedWaitlistId(null);
-      await load(undefined, `${entry.guestLabel} marked ${statusLabel(nextStatus)} on the waitlist.`);
+      await load(undefined, `${entry.guestLabel} marked ${statusLabel(nextStatus)} on the waitlist.`, `Saving ${entry.guestLabel} as ${statusLabel(nextStatus)} on the waitlist.`, 'saving');
     } catch (error) {
-      setStatus(`Waitlist update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Waitlist update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setWaitBusy(false);
     }
@@ -962,12 +1061,16 @@ function OperatorPage() {
 
   async function updateNotifyStatus(entry: NotifyRequest, nextStatus: 'active' | 'notified' | 'booked' | 'cancelled') {
     setNotifyBusy(true);
+    markSyncSaving(`Saving ${entry.guestLabel} as ${statusLabel(nextStatus)} in Notify.`);
     try {
       const result = await operatorNotify(token, { op: 'status', notifyRequestId: entry.id, status: nextStatus });
       if (!result.ok) throw new Error(result.error || 'Notify update failed');
-      await load(undefined, `${entry.guestLabel} marked ${statusLabel(nextStatus)} in Notify.`);
+      await load(undefined, `${entry.guestLabel} marked ${statusLabel(nextStatus)} in Notify.`, `Saving ${entry.guestLabel} as ${statusLabel(nextStatus)} in Notify.`, 'saving');
     } catch (error) {
-      setStatus(`Notify update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Notify update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setNotifyBusy(false);
     }
@@ -995,6 +1098,7 @@ function OperatorPage() {
       return;
     }
     setWaitBusy(true);
+    markSyncSaving(`Seating waitlist party ${entry.guestLabel} at table ${table.code}.`);
     try {
       const result = await operatorWaitlist(token, { op: 'seat', waitlistId: entry.id, tableCode: table.code });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Waitlist seating failed');
@@ -1010,9 +1114,12 @@ function OperatorPage() {
       selectReservation(result.reference);
       setQueueFilter('Seated');
       setActiveRail('Floor');
-      await load(undefined, `Seated waitlist party ${result.reference} at table ${table.code}.`);
+      await load(undefined, `Seated waitlist party ${result.reference} at table ${table.code}.`, `Seating waitlist party ${entry.guestLabel} at table ${table.code}.`, 'saving');
     } catch (error) {
-      setStatus(`Waitlist seating failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Waitlist seating failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setWaitBusy(false);
     }
@@ -1021,6 +1128,17 @@ function OperatorPage() {
   useEffect(() => {
     const tick = window.setInterval(() => setOperatorNowMs(Date.now()), 60000);
     return () => window.clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const allBookings = state?.bookings || [];
@@ -1049,6 +1167,24 @@ function OperatorPage() {
   const notifyRequests = allNotifyRequests.filter(notifyRequestIsOnSelectedService);
   const tableBlocks = allTableBlocks.filter(blockIsOnSelectedService);
   const pacingRules = allPacingRules.filter(pacingRuleIsOnSelectedService);
+  const syncStatusClass = !isOnline ? 'offline' : syncState;
+  const syncStatusLabel = !isOnline
+    ? 'Offline'
+    : syncState === 'refreshing'
+      ? 'Refreshing'
+      : syncState === 'saving'
+        ? 'Saving'
+        : syncState === 'error'
+          ? 'Sync issue'
+          : lastSyncAtMs
+            ? 'Live'
+            : 'Not synced';
+  const syncStatusDetail = !isOnline
+    ? 'Network unavailable. Keep this iPad open and retry when service returns.'
+    : syncState === 'idle' && lastSyncAtMs
+      ? `Synced ${formatSyncTime(lastSyncAtMs)}`
+      : syncMessage;
+  const syncRecordSummary = `${bookings.length} bookings · ${waitlist.length} waitlist · ${notifyRequests.length} notify`;
   const selectedServiceLabel = serviceDateLabel(selectedServiceDate);
   const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
   const activeCount = activeBookings.reduce((total, booking) => total + booking.partySize, 0);
@@ -1379,9 +1515,9 @@ function OperatorPage() {
     .filter(block => block.status === 'active')
     .forEach(block => {
       timelineBlocksByTable.set(block.tableCode, [...(timelineBlocksByTable.get(block.tableCode) || []), block]);
-    });
+  });
   const timelineBlockCount = tableBlocks.filter(block => block.status === 'active').length;
-  const showTimelineGrid = timelineBookings.length > 0 || timelineBlockCount > 0;
+  const showTimelineGrid = true;
   const timelineSectionGroups = sectionNames.map(sectionName => ({
     sectionName,
     tables: floorTables.filter(table => table.section === sectionName),
@@ -1536,9 +1672,28 @@ function OperatorPage() {
     setBookTime(time);
     setFloorFocusTime(time);
     setBookSlots([]);
+    setBookSource(section
+      ? { tone: 'manual', label: `${section === 'indoor' ? 'Indoor' : 'Patio'} table search`, detail: `${slotLabelForTime(time)} · ${partySize || bookPartySize} guests` }
+      : null);
     if (section) setBookSection(section);
     if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
-    setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${time}.`);
+    setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${slotLabelForTime(time)}.`);
+  }
+
+  function makeOperatorHandoffSlot(source: string, date: string, time: string, displayTime: string, partySize: number, seating: { section: SeatingSection; label: string }[]): AvailabilitySlot {
+    const startsAt = `${date}T${time}:00-07:00`;
+    const endsAtDate = new Date(new Date(startsAt).getTime() + 90 * 60 * 1000);
+    return {
+      slotId: `${source}_${date}_${time}_${partySize}`,
+      date,
+      time,
+      displayTime,
+      partySize,
+      seating,
+      exact: true,
+      startsAt,
+      endsAt: endsAtDate.toISOString()
+    };
   }
 
   function startOperatorBookFromAvailability(slot: AvailabilityMatrixRow) {
@@ -1546,17 +1701,7 @@ function OperatorPage() {
     const seating = slot.sections.length
       ? slot.sections.map(section => ({ section, label: section === 'indoor' ? 'Indoor' : 'Patio' }))
       : [{ section: preferredSection, label: preferredSection === 'indoor' ? 'Indoor' : 'Patio' }];
-    const handoffSlot: AvailabilitySlot = {
-      slotId: `operator_availability_${selectedServiceDate}_${slot.time}_${availabilityPartySize}`,
-      date: selectedServiceDate,
-      time: slot.time,
-      displayTime: slot.slot,
-      partySize: availabilityPartySize,
-      seating,
-      exact: true,
-      startsAt: `${selectedServiceDate}T${slot.time}:00-07:00`,
-      endsAt: `${selectedServiceDate}T${slot.time}:00-07:00`
-    };
+    const handoffSlot = makeOperatorHandoffSlot('operator_availability', selectedServiceDate, slot.time, slot.slot, availabilityPartySize, seating);
     setActiveRail('Book');
     setBookDate(selectedServiceDate);
     setBookTime(slot.time);
@@ -1564,8 +1709,26 @@ function OperatorPage() {
     setBookPartySize(Math.min(Math.max(availabilityPartySize, 1), 8));
     setBookSection(preferredSection);
     setBookSlots([handoffSlot]);
+    setBookSource({ tone: 'availability', label: 'Availability', detail: `${slot.slot} · ${availabilityPartySize} guests · live exact match` });
     setBookStatus(`Ready to book ${availabilityPartySize} guests at ${slot.slot} from live availability.`);
     setStatus(`Ready to book ${availabilityPartySize} guests at ${slot.slot} from Availability.`);
+  }
+
+  function startOperatorBookFromTimelineCell(table: (typeof floorTables)[number], time: string, displayTime: string) {
+    const section: SeatingSection = table.section === 'Patio' ? 'outdoor' : 'indoor';
+    const partySize = Math.min(Math.max(table.seats, 1), 8);
+    const seating = [{ section, label: section === 'indoor' ? 'Indoor' : 'Patio' }];
+    const handoffSlot = makeOperatorHandoffSlot(`operator_timeline_${table.code}`, selectedServiceDate, time, displayTime, partySize, seating);
+    setActiveRail('Book');
+    setBookDate(selectedServiceDate);
+    setBookTime(time);
+    setFloorFocusTime(time);
+    setBookPartySize(partySize);
+    setBookSection(section);
+    setBookSlots([handoffSlot]);
+    setBookSource({ tone: 'timeline', label: `Timeline · table ${table.code} · ${displayTime}`, detail: `${table.section} · ${table.seats} seats · exact table lane`, targetTableCode: table.code });
+    setBookStatus(`Ready to book ${partySize} guests at ${displayTime} from table ${table.code}.`);
+    setStatus(`Ready to book ${partySize} guests at ${displayTime} from Timeline table ${table.code}.`);
   }
 
   function selectGuestProfile(profile: GuestProfile) {
@@ -1587,6 +1750,7 @@ function OperatorPage() {
     event?.preventDefault();
     if (!activeGuestProfile) return;
     setProfileBusy(true);
+    markSyncSaving(`Saving ${profileNameDraft || activeGuestProfile.guestLabel}'s guest profile.`);
     try {
       const result = await operatorGuest(token, {
         op: 'update',
@@ -1599,9 +1763,17 @@ function OperatorPage() {
       });
       if (!result.ok) throw new Error(result.error || 'Profile update failed');
       setSelectedGuestProfileId(activeGuestProfile.id);
-      await load(undefined, `Updated ${profileNameDraft || activeGuestProfile.guestLabel}'s guest profile.`);
+      await load(
+        undefined,
+        `Updated ${profileNameDraft || activeGuestProfile.guestLabel}'s guest profile.`,
+        `Saving ${profileNameDraft || activeGuestProfile.guestLabel}'s guest profile.`,
+        'saving'
+      );
     } catch (error) {
-      setStatus(`Profile update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Profile update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setProfileBusy(false);
     }
@@ -1632,6 +1804,137 @@ function OperatorPage() {
     setFloorAction('seat');
     setStatus(`Moving ${booking.reference}. Drag or tap a compatible open table.`);
   }
+
+  type HostBriefingItem = {
+    key: string;
+    tone: 'urgent' | 'seat' | 'turn' | 'wait' | 'notify' | 'pace' | 'clear';
+    label: string;
+    detail: string;
+    meta: string;
+    action: string;
+    onClick: () => void;
+  };
+
+  const activeHostBookings = [...activeBookings].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const lateHostBooking = activeHostBookings.find(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'late');
+  const dueHostBooking = activeHostBookings.find(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'due');
+  const checkedInHostBooking = activeHostBookings.find(booking => booking.status === 'checked_in');
+  const turnRiskHostBooking = activeHostBookings.find(booking => ['ready_to_turn', 'over_turn', 'approaching_turn'].includes(turnRiskForBooking(booking)));
+  const notifiedWaitHostEntry = openWaitlist.find(entry => entry.status === 'notified') || openWaitlist[0] || null;
+  const notifyHostEntry = activeNotifyRequests[0] || null;
+  const pacingHostSlot = reportPacingRows.find(row => row.state === 'full' || row.state === 'tight' || row.rule) || null;
+  const hostBriefingItems: HostBriefingItem[] = [];
+  const pushHostBriefingItem = (item: HostBriefingItem) => {
+    if (!hostBriefingItems.some(existing => existing.key === item.key)) hostBriefingItems.push(item);
+  };
+
+  if (lateHostBooking) {
+    const arrivalState = arrivalStateForBooking(lateHostBooking, operatorNowMs);
+    pushHostBriefingItem({
+      key: `late-${lateHostBooking.reference}`,
+      tone: 'urgent',
+      label: `${floorGuestName(lateHostBooking)} is late`,
+      detail: `${arrivalState.detail} · ${lateHostBooking.partySize} guests · ${lateHostBooking.section} · table ${lateHostBooking.tableCode || 'pending'}`,
+      meta: `${formatLocalTime(lateHostBooking.startsAt)} · ${lateHostBooking.reference}`,
+      action: 'Review late',
+      onClick: () => { setActiveRail('Floor'); setQueueFilter('Late'); setMovingReference(null); selectReservation(lateHostBooking.reference); }
+    });
+  }
+
+  if (checkedInHostBooking) {
+    pushHostBriefingItem({
+      key: `seat-${checkedInHostBooking.reference}`,
+      tone: 'seat',
+      label: `Seat ${floorGuestName(checkedInHostBooking)}`,
+      detail: `${checkedInHostBooking.partySize} guests checked in · ${checkedInHostBooking.section} · table ${checkedInHostBooking.tableCode || 'pending'}`,
+      meta: `${formatLocalTime(checkedInHostBooking.startsAt)} · ${checkedInHostBooking.reference}`,
+      action: 'Seat now',
+      onClick: () => beginMoveMode(checkedInHostBooking)
+    });
+  }
+
+  if (turnRiskHostBooking) {
+    pushHostBriefingItem({
+      key: `turn-${turnRiskHostBooking.reference}`,
+      tone: 'turn',
+      label: `${turnRiskLabel(turnRiskForBooking(turnRiskHostBooking))} at ${turnRiskHostBooking.tableCode || 'pending'}`,
+      detail: `${floorGuestName(turnRiskHostBooking)} · ${serviceStageLabel(turnRiskHostBooking.serviceStage)} · ${formatLocalTime(turnRiskHostBooking.startsAt)} to ${formatLocalTime(turnRiskHostBooking.endsAt)}`,
+      meta: `${turnRiskHostBooking.partySize} guests · ${turnRiskHostBooking.reference}`,
+      action: 'Open turn',
+      onClick: () => { setActiveRail('Floor'); setOperatorMode('floor'); setMovingReference(null); selectReservation(turnRiskHostBooking.reference); }
+    });
+  }
+
+  if (!lateHostBooking && dueHostBooking) {
+    const arrivalState = arrivalStateForBooking(dueHostBooking, operatorNowMs);
+    pushHostBriefingItem({
+      key: `due-${dueHostBooking.reference}`,
+      tone: 'seat',
+      label: `${floorGuestName(dueHostBooking)} due now`,
+      detail: `${arrivalState.detail} · ${dueHostBooking.partySize} guests · ${dueHostBooking.section} · table ${dueHostBooking.tableCode || 'pending'}`,
+      meta: `${formatLocalTime(dueHostBooking.startsAt)} · ${dueHostBooking.reference}`,
+      action: 'Review due',
+      onClick: () => { setActiveRail('Floor'); setQueueFilter('Due now'); setMovingReference(null); selectReservation(dueHostBooking.reference); }
+    });
+  }
+
+  if (notifiedWaitHostEntry) {
+    pushHostBriefingItem({
+      key: `wait-${notifiedWaitHostEntry.id}`,
+      tone: 'wait',
+      label: `${notifiedWaitHostEntry.guestLabel} waitlist`,
+      detail: `${notifiedWaitHostEntry.partySize} guests · ${notifiedWaitHostEntry.quotedWaitMinutes} min quote · ${notifiedWaitHostEntry.section || 'either'}`,
+      meta: `${formatLocalTime(notifiedWaitHostEntry.startsAt)} · ${statusLabel(notifiedWaitHostEntry.status)}`,
+      action: 'Open wait',
+      onClick: () => { setActiveRail('Wait'); setQueueFilter('Waitlist'); setSelectedWaitlistId(notifiedWaitHostEntry.id); setSelectedReference(null); setSelectedGuestProfileId(null); setMovingReference(null); }
+    });
+  }
+
+  if (notifyHostEntry) {
+    pushHostBriefingItem({
+      key: `notify-${notifyHostEntry.id}`,
+      tone: 'notify',
+      label: `${notifyHostEntry.guestLabel} wants ${notifyHostEntry.requestedTime}`,
+      detail: `${notifyHostEntry.partySize} guests · ${notifyHostEntry.section || 'either'} · ${notifyHostEntry.note || 'Notify request'}`,
+      meta: `${statusLabel(notifyHostEntry.status)} · ${notifyHostEntry.id.slice(0, 8)}`,
+      action: 'Open Notify',
+      onClick: () => { selectOperatorRail('Texts'); setQueueFilter('Notify'); setMovingReference(null); }
+    });
+  }
+
+  if (pacingHostSlot && hostBriefingItems.length < 4) {
+    pushHostBriefingItem({
+      key: `pace-${pacingHostSlot.time}`,
+      tone: 'pace',
+      label: pacingHostSlot.rule ? `${pacingHostSlot.slot} pacing cap` : `${pacingHostSlot.slot} pacing ${pacingHostSlot.state}`,
+      detail: `${pacingHostSlot.covers}/${pacingHostSlot.limit} covers · ${pacingHostSlot.remaining} open`,
+      meta: pacingHostSlot.rule ? pacingHostSlot.rule.reason : 'Live cover pace',
+      action: 'View board',
+      onClick: () => { setActiveRail('Floor'); setOperatorMode('availability'); setPacingSlotTime(pacingHostSlot.time); setFloorFocusTime(pacingHostSlot.time); setMovingReference(null); }
+    });
+  }
+
+  if (hostBriefingItems.length === 0) {
+    hostBriefingItems.push({
+      key: 'clear',
+      tone: 'clear',
+      label: 'Service is clear',
+      detail: 'No urgent arrivals, waitlist parties, Notify requests, or pacing caps need attention.',
+      meta: `${selectedServiceLabel} dinner`,
+      action: 'View floor',
+      onClick: () => { setActiveRail('Floor'); setOperatorMode('floor'); setQueueFilter('All'); setMovingReference(null); }
+    });
+  }
+
+  const hostBriefingHeadline = hostBriefingItems.some(item => item.tone === 'urgent')
+    ? 'Late arrival needs attention'
+    : hostBriefingItems.some(item => item.tone === 'seat')
+      ? 'Seat the next party'
+      : hostBriefingItems.some(item => item.tone === 'turn')
+        ? 'Watch table turns'
+        : hostBriefingItems.some(item => item.tone !== 'clear')
+          ? 'Host stand next actions'
+          : 'Host stand clear';
 
   function beginReservationDrag(event: React.DragEvent<HTMLElement>, booking: ReservationSummary) {
     if (!canMoveBooking(booking)) {
@@ -1735,6 +2038,7 @@ function OperatorPage() {
       return;
     }
     setWaitBusy(true);
+    markSyncSaving(`Seating waitlist party ${entry.guestLabel} at tables ${combination.code}.`);
     try {
       const result = await operatorWaitlist(token, { op: 'seat', waitlistId: entry.id, tableCode: combination.code });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Waitlist seating failed');
@@ -1750,9 +2054,12 @@ function OperatorPage() {
       selectReservation(result.reference);
       setQueueFilter('Seated');
       setActiveRail('Floor');
-      await load(undefined, `Seated waitlist party ${result.reference} at tables ${combination.code}.`);
+      await load(undefined, `Seated waitlist party ${result.reference} at tables ${combination.code}.`, `Seating waitlist party ${entry.guestLabel} at tables ${combination.code}.`, 'saving');
     } catch (error) {
-      setStatus(`Waitlist seating failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Waitlist seating failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setWaitBusy(false);
     }
@@ -1825,6 +2132,7 @@ function OperatorPage() {
       return;
     }
     setBlockBusy(true);
+    markSyncSaving(`Blocking table ${table.code} from ${slotLabelForTime(tableBlockStartTime)} to ${slotLabelForTime(tableBlockEndTime)}.`);
     try {
       const result = await operatorFloor(token, {
         op: 'block',
@@ -1837,9 +2145,12 @@ function OperatorPage() {
       if (!result.ok || !result.tableBlock) throw new Error(result.error || 'Table block failed');
       setFloorAction('seat');
       setFloorFocusTime(tableBlockStartTime);
-      await load(undefined, `Blocked table ${table.code} from ${slotLabelForTime(tableBlockStartTime)} to ${slotLabelForTime(tableBlockEndTime)}: ${result.tableBlock.reason}.`);
+      await load(undefined, `Blocked table ${table.code} from ${slotLabelForTime(tableBlockStartTime)} to ${slotLabelForTime(tableBlockEndTime)}: ${result.tableBlock.reason}.`, `Blocking table ${table.code} from ${slotLabelForTime(tableBlockStartTime)} to ${slotLabelForTime(tableBlockEndTime)}.`, 'saving');
     } catch (error) {
-      setStatus(`Table block failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Table block failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setBlockBusy(false);
     }
@@ -1847,12 +2158,16 @@ function OperatorPage() {
 
   async function clearTableBlock(block: TableBlock) {
     setBlockBusy(true);
+    markSyncSaving(`Clearing block on table ${block.tableCode}.`);
     try {
       const result = await operatorFloor(token, { op: 'clear', blockId: block.id });
       if (!result.ok) throw new Error(result.error || 'Clear block failed');
-      await load(undefined, `Cleared block on table ${block.tableCode}.`);
+      await load(undefined, `Cleared block on table ${block.tableCode}.`, `Clearing block on table ${block.tableCode}.`, 'saving');
     } catch (error) {
-      setStatus(`Clear block failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Clear block failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setBlockBusy(false);
     }
@@ -1861,13 +2176,17 @@ function OperatorPage() {
   async function savePacingRule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPacingBusy(true);
+    markSyncSaving(`Saving pacing cap for ${slotLabelForTime(pacingSlotTime)}.`);
     try {
       const maxCovers = Math.max(0, Math.min(99, Number.isFinite(pacingMaxCovers) ? pacingMaxCovers : defaultPacingLimit));
       const result = await operatorPacing(token, { op: 'set', date: selectedServiceDate, time: pacingSlotTime, maxCovers, reason: pacingReason });
       if (!result.ok || !result.pacingRule) throw new Error(result.error || 'Pacing update failed');
-      await load(undefined, `Capped ${slotLabelForTime(pacingSlotTime)} at ${maxCovers} covers.`);
+      await load(undefined, `Capped ${slotLabelForTime(pacingSlotTime)} at ${maxCovers} covers.`, `Saving pacing cap for ${slotLabelForTime(pacingSlotTime)}.`, 'saving');
     } catch (error) {
-      setStatus(`Pacing update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Pacing update failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setPacingBusy(false);
     }
@@ -1875,12 +2194,16 @@ function OperatorPage() {
 
   async function clearPacingRule(rule: PacingRule) {
     setPacingBusy(true);
+    markSyncSaving(`Clearing pacing cap for ${slotLabelForTime(rule.slotTime)}.`);
     try {
       const result = await operatorPacing(token, { op: 'clear', ruleId: rule.id });
       if (!result.ok) throw new Error(result.error || 'Clear pacing failed');
-      await load(undefined, `Cleared pacing cap for ${slotLabelForTime(rule.slotTime)}.`);
+      await load(undefined, `Cleared pacing cap for ${slotLabelForTime(rule.slotTime)}.`, `Clearing pacing cap for ${slotLabelForTime(rule.slotTime)}.`, 'saving');
     } catch (error) {
-      setStatus(`Clear pacing failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      const failure = `Clear pacing failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setSyncState('error');
+      setSyncMessage(failure);
+      setStatus(failure);
     } finally {
       setPacingBusy(false);
     }
@@ -1958,7 +2281,21 @@ function OperatorPage() {
                   </button>
                 ))}
               </div>
-              <p className="resyos-live-status" role="status">{status}</p>
+              <div className={`resyos-sync-panel ${syncStatusClass}`} aria-label="Operator sync status" role="status" aria-live="polite">
+                <div className="resyos-sync-line">
+                  <span><i aria-hidden="true"></i>{syncStatusLabel}</span>
+                  <button
+                    type="button"
+                    className="resyos-refresh-button"
+                    disabled={busy}
+                    onClick={() => load(undefined, 'Operator view refreshed from Supabase demo data.', 'Refreshing live service data from Supabase.', 'refreshing')}
+                  >
+                    {syncState === 'refreshing' ? 'Refreshing' : 'Refresh'}
+                  </button>
+                </div>
+                <strong>{syncStatusDetail}</strong>
+                <small title={status}>{syncRecordSummary} · {status}</small>
+              </div>
             </header>
             <div className="resyos-party-row" aria-label="Party size filters">
               <span>Party Size</span>
@@ -2018,6 +2355,26 @@ function OperatorPage() {
                       </button>
                     ))}
                   </div>}
+                  {activeRail !== 'Guests' && (
+                    <section className="host-briefing-card" aria-label="Host briefing">
+                      <div className="host-briefing-head">
+                        <span>Now</span>
+                        <strong>{hostBriefingHeadline}</strong>
+                      </div>
+                      <div className="host-briefing-list">
+                        {hostBriefingItems.slice(0, 4).map(item => (
+                          <article key={item.key} className={`host-briefing-item ${item.tone}`}>
+                            <button type="button" onClick={item.onClick} aria-label={`${item.action}: ${item.label}`}>
+                              <span>{item.label}</span>
+                              <strong>{item.detail}</strong>
+                              <small>{item.meta}</small>
+                            </button>
+                            <em>{item.action}</em>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                 </>
               )}
               {activeRail === 'Book' ? (
@@ -2042,6 +2399,12 @@ function OperatorPage() {
                   <label>Note<textarea value={bookNote} onChange={event => setBookNote(event.target.value)} maxLength={160} aria-label="Operator booking note" /></label>
                   <button type="submit" disabled={busy || bookBusy}>{bookBusy ? 'Searching...' : 'Check availability'}</button>
                 </form>
+                {bookSource && (
+                  <div className={`operator-book-source ${bookSource.tone}`} aria-label="Operator booking source">
+                    <span>{bookSource.label}</span>
+                    <strong>{bookSource.detail}</strong>
+                  </div>
+                )}
                 <p className="operator-book-status" role="status">{bookStatus}</p>
                 <div className="operator-book-results" aria-label="Operator booking availability">
                   {bookSlots.map(slot => (
@@ -2410,7 +2773,7 @@ function OperatorPage() {
                       <h2>Timeline</h2>
                       <span>{timelineBookings.length} visible parties · {timelineBlockCount} timed blocks · 90 min turns</span>
                     </div>
-                    {timelineBookings.length === 0 && timelineBlockCount === 0 && <p>No parties match the current filters.</p>}
+                    {timelineBookings.length === 0 && timelineBlockCount === 0 && <p>No parties booked yet. Tap an open table cell to start a reservation from the book.</p>}
                     {timelineBookings.length === 0 && timelineBlockCount > 0 && <p>No parties match the current filters. Showing timed table blocks.</p>}
                     {showTimelineGrid && (
                       <div className="timeline-grid-wrap">
@@ -2446,7 +2809,7 @@ function OperatorPage() {
                                           type="button"
                                           key={`${table.code}-${slot}`}
                                           className={`timeline-cell ${cellBlock ? 'blocked' : ''}`}
-                                          onClick={() => cellBlock ? setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(cellBlock)}: ${cellBlock.reason}.`) : cellCanSeat ? seatSelectedAtTable(table) : seedOperatorBook(slotTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats)}
+                                          onClick={() => cellBlock ? setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(cellBlock)}: ${cellBlock.reason}.`) : cellCanSeat ? seatSelectedAtTable(table) : startOperatorBookFromTimelineCell(table, slotTime, slot)}
                                           aria-label={cellBlock ? `Table ${table.code} blocked at ${slot}: ${cellBlock.reason}` : cellCanSeat ? `Seat ${selectedBooking?.reference} at table ${table.code} from ${slot}` : `Book table ${table.code} at ${slot}`}
                                         />
                                       );
