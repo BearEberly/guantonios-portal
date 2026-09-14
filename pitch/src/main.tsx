@@ -1271,12 +1271,26 @@ function OperatorPage() {
     { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', zone: 'counter', x: 82, y: 17, w: 9, h: 31, rotation: 0, seatsVisual: 1 },
     { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', zone: 'counter', x: 82, y: 56, w: 9, h: 31, rotation: 0, seatsVisual: 1 }
   ] as const;
+  const serverSections = [
+    { id: 'andrea', name: 'Andrea', initials: 'AR', station: 'Dining window', tableCodes: ['12', '14', '21', '22', '40', '41'] },
+    { id: 'marco', name: 'Marco', initials: 'MO', station: 'Banquette wall', tableCodes: ['31', '32', '33', '34', '35', '36', '37', '38', '39', '42'] },
+    { id: 'sofia', name: 'Sofia', initials: 'SF', station: 'Patio rail', tableCodes: ['P1', 'P2', 'P3', 'P4'] },
+    { id: 'nico', name: 'Nico', initials: 'NC', station: 'Garden and counter', tableCodes: ['P5', 'P6', 'B1', 'B2'] }
+  ] as const;
+  const bookingTableCodes = (booking?: ReservationSummary | null) => booking
+    ? (booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : [])
+    : [];
+  const serverForTableCode = (tableCode?: string | null) => tableCode
+    ? serverSections.find(server => (server.tableCodes as readonly string[]).includes(tableCode)) || null
+    : null;
+  const serverForBooking = (booking?: ReservationSummary | null) => bookingTableCodes(booking).map(serverForTableCode).find(Boolean) || null;
   const activeFloorBookings = activeBookings.filter(booking => rangeOverlapsSlot(booking.startsAt, booking.endsAt, floorFocusTime));
   const activeFloorBlocks = tableBlocks.filter(block => block.status === 'active' && rangeOverlapsSlot(block.startsAt, block.endsAt, floorFocusTime));
   const bookingsByTable = new Map(activeFloorBookings.flatMap(booking => (booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : []).map(code => [code, booking] as const)));
   const tableBlocksByTable = new Map(activeFloorBlocks.map(block => [block.tableCode, block]));
   const selectedTableCodes = selectedBooking ? (selectedBooking.tableCodes?.length ? selectedBooking.tableCodes : selectedBooking.tableCode ? [selectedBooking.tableCode] : []) : [];
   const selectedDisplayTable = selectedBooking?.tableCode || (selectedTableCodes.length ? selectedTableCodes.join('+') : 'pending');
+  const selectedServer = serverForBooking(selectedBooking);
   const selectedTurnMinutes = selectedBooking ? Math.round(Math.max(0, new Date(selectedBooking.endsAt).getTime() - new Date(selectedBooking.startsAt).getTime()) / 60000) : 0;
   const selectedTableBlock = selectedTableCodes.map(code => tableBlocksByTable.get(code)).find(Boolean);
   const selectedServiceStage = selectedBooking?.serviceStage || 'not_started';
@@ -1460,6 +1474,33 @@ function OperatorPage() {
   const reportBlockedTables = tableBlocks.filter(block => block.status === 'active').length;
   const reportOpenTables = Math.max(0, floorTables.length - reportOccupiedTableCodes.size - reportBlockedTables);
   const reportUtilization = reportTotalSeats ? Math.round((reportOccupiedSeats / reportTotalSeats) * 100) : 0;
+  const floorServerRows = serverSections.map(server => {
+    const tableCodes = server.tableCodes as readonly string[];
+    const assignedBookings = bookings.filter(booking => bookingTableCodes(booking).some(code => tableCodes.includes(code)));
+    const activeAssigned = activeFloorBookings.filter(booking => bookingTableCodes(booking).some(code => tableCodes.includes(code)));
+    const seatedBookings = activeAssigned.filter(booking => booking.status === 'seated');
+    const upcomingBookings = assignedBookings.filter(booking => ['confirmed', 'checked_in'].includes(booking.status));
+    const completedBookings = assignedBookings.filter(booking => booking.status === 'completed');
+    const openTables = tableCodes.filter(code => !bookingsByTable.has(code) && !tableBlocksByTable.has(code)).length;
+    const turnAlerts = seatedBookings.filter(booking => ['approaching_turn', 'over_turn', 'ready_to_turn'].includes(turnRiskForBooking(booking))).length;
+    return {
+      ...server,
+      tableCount: tableCodes.length,
+      activeCovers: activeAssigned.reduce((total, booking) => total + booking.partySize, 0),
+      seatedTables: seatedBookings.length,
+      upcomingParties: upcomingBookings.length,
+      completedCovers: completedBookings.reduce((total, booking) => total + booking.partySize, 0),
+      openTables,
+      turnAlerts
+    };
+  });
+  const nextServerRow = [...floorServerRows]
+    .filter(row => row.openTables > 0)
+    .sort((a, b) => a.activeCovers - b.activeCovers || a.seatedTables - b.seatedTables || a.name.localeCompare(b.name))[0] || floorServerRows[0];
+  const lastSeatedServerBooking = [...activeBookings]
+    .filter(booking => booking.status === 'seated' && serverForBooking(booking))
+    .sort((a, b) => (new Date(b.serviceStageUpdatedAt || b.startsAt).getTime() || 0) - (new Date(a.serviceStageUpdatedAt || a.startsAt).getTime() || 0))[0] || null;
+  const lastSeatedServer = serverForBooking(lastSeatedServerBooking);
   const averageWaitQuote = openWaitlist.length ? Math.round(openWaitlist.reduce((total, entry) => total + entry.quotedWaitMinutes, 0) / openWaitlist.length) : 0;
   const notifiedWaitlist = openWaitlist.filter(entry => entry.status === 'notified').length;
   const railItems: Array<{ icon: string; label: OperatorRailSection; count: number }> = [
@@ -2711,6 +2752,7 @@ function OperatorPage() {
                             </div>
                             {floorTables.filter(table => table.section === sectionName).map(table => {
                               const booking = bookingsByTable.get(table.code);
+                              const server = serverForTableCode(table.code);
                               const arrivalState = arrivalStateForBooking(booking, operatorNowMs);
                               const tableBlock = tableBlocksByTable.get(table.code);
                               const tileStatus = booking ? booking.status : tableBlock ? 'blocked' : 'open';
@@ -2731,16 +2773,17 @@ function OperatorPage() {
                                 <button
                                   type="button"
                                   key={table.code}
-                                  className={`floor-table ${table.shape} zone-${table.zone} ${tileStatus} ${booking ? `occupied arrival-${arrivalState.key} service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)}` : ''} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                  className={`floor-table ${table.shape} zone-${table.zone} ${server ? `server-${server.id}` : ''} ${tileStatus} ${booking ? `occupied arrival-${arrivalState.key} service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)}` : ''} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                   style={tableStyle}
                                   onClick={() => handleTableTap(table)}
                                   onDragOver={event => tableDragOver(event, table)}
                                   onDragLeave={() => tableDragLeave(table)}
                                   onDrop={event => dropBookingAtTable(event, table)}
                                   aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
-                                  aria-label={`Table ${table.code}, ${table.seats} seats at ${slotLabelForTime(floorFocusTime)}${booking ? `, ${floorGuestName(booking)}, ${arrivalState.label}, ${arrivalState.detail}, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, ${serviceStageLabel(booking.serviceStage)}, ${turnRiskLabel(turnRiskForBooking(booking))}` : tableBlock ? `, blocked ${blockWindowLabel(tableBlock)}, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
+                                  aria-label={`Table ${table.code}, ${table.seats} seats at ${slotLabelForTime(floorFocusTime)}${server ? `, server ${server.name}` : ''}${booking ? `, ${floorGuestName(booking)}, ${arrivalState.label}, ${arrivalState.detail}, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, ${serviceStageLabel(booking.serviceStage)}, ${turnRiskLabel(turnRiskForBooking(booking))}` : tableBlock ? `, blocked ${blockWindowLabel(tableBlock)}, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
                                 >
                                   {booking && <small className="floor-table-code">{table.code}</small>}
+                                  {server && <small className="floor-server-badge">{server.initials}</small>}
                                   <strong className={booking ? 'floor-table-guest' : undefined}>{booking ? floorGuestName(booking) : table.code}</strong>
                                   <span>{booking ? `${table.code} · ${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? `Blocked ${slotLabelForTime(floorFocusTime)}` : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
                                   {booking ? <em>{arrivalState.label} · {serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em> : !tableBlock && !assignable && !blockable && !comboMember && <i className="floor-seat-dots" aria-hidden="true">{Array.from({ length: Math.min(table.seatsVisual, 6) }, (_, index) => <b key={index} />)}</i>}
@@ -3046,6 +3089,33 @@ function OperatorPage() {
                   </div>
                 </section>
               )}
+              <section className="server-rotation-card" aria-label="Server rotation">
+                <div className="server-rotation-head">
+                  <span>Server rotation</span>
+                  <strong>Suggested next: {nextServerRow?.name || 'Open'}</strong>
+                  <p>{nextServerRow ? `${nextServerRow.station} · ${nextServerRow.openTables} open tables · ${nextServerRow.activeCovers} active covers` : 'No open server section found.'}</p>
+                </div>
+                <div className="server-rotation-list">
+                  {floorServerRows.map(row => (
+                    <article key={row.id} className={`server-row server-${row.id}`}>
+                      <div>
+                        <strong>{row.name}</strong>
+                        <span>{row.station}</span>
+                      </div>
+                      <dl>
+                        <dt>{row.activeCovers}</dt>
+                        <dd>active covers</dd>
+                        <dt>{row.seatedTables}</dt>
+                        <dd>seated</dd>
+                        <dt>{row.openTables}</dt>
+                        <dd>open</dd>
+                      </dl>
+                      <p>{row.upcomingParties} upcoming · {row.completedCovers} completed covers{row.turnAlerts ? ` · ${row.turnAlerts} turn alerts` : ''}</p>
+                    </article>
+                  ))}
+                </div>
+                <p className="server-last-seated">{lastSeatedServerBooking && lastSeatedServer ? `Recent seated: ${lastSeatedServer.name} at table ${lastSeatedServerBooking.tableCode || bookingTableCodes(lastSeatedServerBooking).join('+')} · ${floorGuestName(lastSeatedServerBooking)}` : 'No seated parties in server rotation yet.'}</p>
+              </section>
               <section className="floor-control-card pacing-control-card" aria-label="Pacing controls">
                 <h2>Pacing controls</h2>
                 <p>{selectedPacingRule ? `${slotLabelForTime(pacingSlotTime)} capped at ${selectedPacingRule.maxCovers}: ${selectedPacingRule.reason}` : `No cap set for ${slotLabelForTime(pacingSlotTime)}.`}</p>
@@ -3075,6 +3145,7 @@ function OperatorPage() {
                   <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedArrivalState.label} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedDisplayTable} · {statusLabel(selectedBooking.status)}</p>
                   <div className="profile-chip-row" aria-label="Selected guest quick tags">
                     {(selectedProfileTags.length ? selectedProfileTags.slice(0, 4) : [selectedBooking.visitCount && selectedBooking.visitCount > 1 ? `${selectedBooking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
+                    {selectedServer && <span>{selectedServer.name} · {selectedServer.station}</span>}
                     <span className={`arrival-chip arrival-${selectedArrivalState.key}`}>{selectedArrivalState.label}</span>
                     {selectedBooking.operatorNote && <span>Host note</span>}
                   </div>

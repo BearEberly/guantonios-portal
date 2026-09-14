@@ -1992,6 +1992,31 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   letter-spacing: 0;
 }
 
+.floor-server-badge {
+  position: absolute !important;
+  right: 5px;
+  top: 5px;
+  display: inline-grid !important;
+  min-width: 20px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(5, 10, 15, .64);
+  color: #f8fbff;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .03em;
+}
+
+.floor-table.server-andrea .floor-server-badge,
+.server-row.server-andrea::before { background: #45b8e8; }
+.floor-table.server-marco .floor-server-badge,
+.server-row.server-marco::before { background: #f2c261; color: #1d1405; }
+.floor-table.server-sofia .floor-server-badge,
+.server-row.server-sofia::before { background: #9b7af4; }
+.floor-table.server-nico .floor-server-badge,
+.server-row.server-nico::before { background: #57c98f; color: #061508; }
+
 .floor-seat-dots {
   position: absolute;
   inset: 5px;
@@ -2534,6 +2559,104 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .report-side-card div {
   display: grid;
   gap: 6px;
+}
+
+.server-rotation-card {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #33404b;
+}
+
+.server-rotation-head {
+  display: grid;
+  gap: 3px;
+}
+
+.server-rotation-head span,
+.server-row span,
+.server-row dd,
+.server-last-seated {
+  color: #9da8b2;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.server-rotation-head strong {
+  color: #f8fbff;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.server-rotation-head p,
+.server-row p,
+.server-last-seated {
+  margin: 0;
+  color: #b7c1ca;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.server-rotation-list {
+  display: grid;
+  gap: 7px;
+}
+
+.server-row {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  padding: 9px 9px 9px 13px;
+  border: 1px solid #34414c;
+  border-radius: 10px;
+  background: #111920;
+  overflow: hidden;
+}
+
+.server-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #5b6a78;
+}
+
+.server-row > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.server-row strong {
+  color: #f8fbff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.server-row dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.server-row dt {
+  color: #f8fbff;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.server-row dd {
+  margin: 2px 0 0;
+  line-height: 1.1;
 }
 
 .timeline-board-head {

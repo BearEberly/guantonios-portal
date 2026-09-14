@@ -645,10 +645,10 @@ test('operator can block and clear an open table from the iPad floor', async ({ 
   await page.getByLabel('Table block reason').fill('Manager hold for repair.');
   await page.getByRole('button', { name: /^Block table$/i }).click();
   await expect(page.getByText(/Tap an open table to block it from 7:30 to 8:00 for this dinner service/i)).toBeVisible();
-  await page.getByRole('button', { name: /Table P1, 2 seats at 7:30, open, block this table/i }).click();
+  await page.getByRole('button', { name: /Table P1, 2 seats at 7:30, .*open, block this table/i }).click();
 
   await expect(page.getByText(/Blocked table P1 from 7:30 to 8:00: Manager hold for repair/i)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 7:30, blocked .*Manager hold for repair/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 7:30, .*blocked .*Manager hold for repair/i })).toBeVisible();
   await expect(page.getByLabel('Table blocks')).toContainText('Table P1');
   await expect(page.getByLabel('Table blocks')).toContainText(/7:30 PM to 8:00 PM/i);
   await expect(page.getByLabel('Table blocks')).toContainText('Manager hold for repair.');
@@ -657,14 +657,14 @@ test('operator can block and clear an open table from the iPad floor', async ({ 
   await expect(page.getByRole('button', { name: /Table P1 blocked from .*Manager hold for repair/i })).toBeVisible();
   await page.getByLabel('Floor snapshot time').selectOption('17:00');
   await page.getByLabel('View controls').getByRole('button', { name: /^Floor$/i }).click();
-  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 5:00, open/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 5:00, .*open/i })).toBeVisible();
   await page.getByLabel('Floor snapshot time').selectOption('19:30');
-  await page.getByRole('button', { name: /Table P1, 2 seats at 7:30, blocked .*Manager hold for repair/i }).click();
+  await page.getByRole('button', { name: /Table P1, 2 seats at 7:30, .*blocked .*Manager hold for repair/i }).click();
   await expect(page.getByText(/Table P1 is blocked from .*Manager hold for repair/i)).toBeVisible();
   await page.getByRole('button', { name: /Clear block on table P1/i }).click();
   await expect(page.getByText(/Cleared block on table P1/i)).toBeVisible();
   await expect(page.getByLabel('Table blocks')).toContainText('No active table blocks.');
-  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 7:30, open/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 7:30, .*open/i })).toBeVisible();
 });
 
 test('operator can add, notify, and seat a walk-in from the Wait rail', async ({ page, request }) => {
@@ -800,6 +800,40 @@ test('operator reports show live service pacing on the iPad', async ({ page, req
   await expect(page.getByLabel('Table turns report')).toContainText(booking.reference);
   await expect(page.getByLabel('Reports summary')).toContainText('Table utilization');
   await expect(page.getByLabel('Report insights')).toContainText('2 covers');
+});
+
+test('operator server rotation tracks table sections on the iPad floor', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const stamp = Date.now();
+  const dining = await createConfirmedDemoBooking(request, { guestLabel: `Andrea Section ${stamp}`, partySize: 2, section: 'indoor', time: '19:30' });
+  const patio = await createConfirmedDemoBooking(request, { guestLabel: `Sofia Section ${stamp}`, partySize: 4, section: 'outdoor', time: '19:30' });
+  const banquette = await createConfirmedDemoBooking(request, { guestLabel: `Marco Section ${stamp}`, partySize: 4, section: 'indoor', time: '20:00' });
+  await apiPost(request, '/api/demo/operator/status', { reference: dining.reference, status: 'seated', tableCode: '12' });
+  await apiPost(request, '/api/demo/operator/status', { reference: patio.reference, status: 'seated', tableCode: 'P3' });
+  await apiPost(request, '/api/demo/operator/status', { reference: banquette.reference, status: 'checked_in', tableCode: '31' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, dining.date);
+
+  const rotation = page.getByLabel('Server rotation');
+  await expect(rotation).toBeVisible();
+  await expect(rotation).toContainText('Server rotation');
+  await expect(rotation).toContainText('Suggested next: Nico');
+  await expect(rotation).toContainText('Andrea');
+  await expect(rotation).toContainText('2');
+  await expect(rotation).toContainText('Sofia');
+  await expect(rotation).toContainText('4');
+  await expect(rotation).toContainText('Marco');
+  await expect(rotation).toContainText('1 upcoming');
+  await expect(rotation).toContainText('Recent seated: Andrea at table 12');
+
+  await expect(page.getByRole('button', { name: /Table 12, 2 seats .*server Andrea/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P3, 4 seats .*server Sofia/i })).toBeVisible();
+  await selectReservationRow(page, dining.reference);
+  await expect(page.locator('.selected-party-panel')).toContainText('Andrea · Dining window');
 });
 
 test('operator service date controls scope the iPad service context', async ({ page, request }) => {
