@@ -970,6 +970,25 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   font-weight: 900;
 }
 
+.resyos-service-date-picker {
+  position: relative;
+  display: inline-flex;
+  min-width: 132px;
+  cursor: pointer;
+}
+
+.resyos-service-date-picker span {
+  width: 100%;
+  pointer-events: none;
+}
+
+.resyos-service-date-picker input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .resyos-mode-controls button.active {
   background: #218fff;
   border-color: #218fff;
@@ -1192,6 +1211,19 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   color: #d7e0e8;
   font-size: 12px;
   font-weight: 850;
+}
+
+.operator-service-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid #33404b;
+  border-radius: 8px;
+  background: #121a21;
+  color: #d7e0e8;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .operator-book-results {

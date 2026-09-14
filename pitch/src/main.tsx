@@ -420,11 +420,42 @@ function ManagePage() {
 type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Reports';
 type OperatorMode = 'floor' | 'timeline' | 'availability' | 'reports';
 
+function dateKeyFromTimestamp(value: string) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(value));
+}
+
+function dateFromDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+}
+
+function addDaysToDateKey(dateKey: string, days: number) {
+  const date = dateFromDateKey(dateKey);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function serviceDateLabel(dateKey: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC'
+  }).format(dateFromDateKey(dateKey));
+}
+
 function OperatorPage() {
+  const defaultServiceDate = nextBookableDate();
   const [token, setToken] = useState(sessionStorage.getItem('demoOperatorToken') || '');
   const [state, setState] = useState<OperatorState | null>(null);
   const [status, setStatus] = useState('Enter the protected demo operator passcode.');
   const [busy, setBusy] = useState(false);
+  const [selectedServiceDate, setSelectedServiceDate] = useState(defaultServiceDate);
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
   const [movingReference, setMovingReference] = useState<string | null>(null);
   const [dragTargetTable, setDragTargetTable] = useState<string | null>(null);
@@ -436,7 +467,7 @@ function OperatorPage() {
   const [queueFilter, setQueueFilter] = useState('All');
   const [partySizeFilter, setPartySizeFilter] = useState<number | '7+' | null>(null);
   const [queueSearch, setQueueSearch] = useState('');
-  const [bookDate, setBookDate] = useState(nextBookableDate());
+  const [bookDate, setBookDate] = useState(defaultServiceDate);
   const [bookTime, setBookTime] = useState('19:30');
   const [bookPartySize, setBookPartySize] = useState(2);
   const [bookSection, setBookSection] = useState<SeatingSection | 'either'>('indoor');
@@ -449,7 +480,7 @@ function OperatorPage() {
   const [selectedWaitlistId, setSelectedWaitlistId] = useState<string | null>(null);
   const [waitGuestName, setWaitGuestName] = useState('Walk-in Guest');
   const [waitContact, setWaitContact] = useState('(209) 555-0101');
-  const [waitDate, setWaitDate] = useState(nextBookableDate());
+  const [waitDate, setWaitDate] = useState(defaultServiceDate);
   const [waitTime, setWaitTime] = useState('19:30');
   const [waitPartySize, setWaitPartySize] = useState(2);
   const [waitSection, setWaitSection] = useState<SeatingSection | 'either'>('either');
@@ -531,6 +562,25 @@ function OperatorPage() {
     }
   }
 
+  function changeServiceDate(nextDate: string) {
+    if (!nextDate) return;
+    setSelectedServiceDate(nextDate);
+    setBookDate(nextDate);
+    setWaitDate(nextDate);
+    setBookSlots([]);
+    setSelectedReference(null);
+    setSelectedWaitlistId(null);
+    setMovingReference(null);
+    setDragTargetTable(null);
+    setFloorAction('seat');
+    const label = serviceDateLabel(nextDate);
+    setStatus(`Viewing ${label} dinner service.`);
+    setBookStatus(`Ready to search ${label} dinner availability from the iPad.`);
+  }
+
+  function shiftServiceDate(days: number) {
+    changeServiceDate(addDaysToDateKey(selectedServiceDate, days));
+  }
 
   async function runOperatorBookSearch(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -573,6 +623,9 @@ function OperatorPage() {
         request: bookNote || 'Booked from the operator iPad demo.'
       });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Confirm failed');
+      setSelectedServiceDate(slot.date);
+      setBookDate(slot.date);
+      setWaitDate(slot.date);
       await operatorGuest(token, {
         op: 'attach',
         reference: result.reference,
@@ -688,15 +741,22 @@ function OperatorPage() {
     }
   }
 
-  const bookings = state?.bookings || [];
-  const holds = state?.holds || [];
-  const waitlist = state?.waitlist || [];
+  const allBookings = state?.bookings || [];
+  const allHolds = state?.holds || [];
+  const allWaitlist = state?.waitlist || [];
   const profiles = state?.profiles || [];
-  const tableBlocks = state?.tableBlocks || [];
+  const allTableBlocks = state?.tableBlocks || [];
   const tableCombinations = state?.tableCombinations || [];
   const notifications = state?.notifications || [];
-  const fallbackServiceDate = `${nextBookableDate()}T19:30:00-07:00`;
-  const serviceDate = bookings[0]?.startsAt || holds[0]?.startsAt || waitlist[0]?.startsAt || tableBlocks[0]?.startsAt || fallbackServiceDate;
+  const bookingIsOnSelectedService = (booking: ReservationSummary) => dateKeyFromTimestamp(booking.startsAt) === selectedServiceDate;
+  const holdIsOnSelectedService = (hold: { startsAt: string }) => dateKeyFromTimestamp(hold.startsAt) === selectedServiceDate;
+  const waitlistIsOnSelectedService = (entry: WaitlistEntry) => entry.requestedDate === selectedServiceDate || dateKeyFromTimestamp(entry.startsAt) === selectedServiceDate;
+  const blockIsOnSelectedService = (block: TableBlock) => block.serviceDate === selectedServiceDate || dateKeyFromTimestamp(block.startsAt) === selectedServiceDate;
+  const bookings = allBookings.filter(bookingIsOnSelectedService);
+  const holds = allHolds.filter(holdIsOnSelectedService);
+  const waitlist = allWaitlist.filter(waitlistIsOnSelectedService);
+  const tableBlocks = allTableBlocks.filter(blockIsOnSelectedService);
+  const selectedServiceLabel = serviceDateLabel(selectedServiceDate);
   const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
   const activeCount = activeBookings.reduce((total, booking) => total + booking.partySize, 0);
   const bookedCount = bookings.filter(booking => booking.status === 'confirmed').length;
@@ -942,6 +1002,7 @@ function OperatorPage() {
 
   function seedOperatorBook(time: string, section?: SeatingSection, partySize?: number) {
     setActiveRail('Book');
+    setBookDate(selectedServiceDate);
     setBookTime(time);
     if (section) setBookSection(section);
     if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
@@ -1192,10 +1253,6 @@ function OperatorPage() {
     setStatus(`Started a ${table.seats}-top booking search from open table ${table.code}.`);
   }
 
-  function serviceDateKey() {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(serviceDate));
-  }
-
   async function blockTable(table: (typeof floorTables)[number]) {
     const tableBooking = bookingsByTable.get(table.code);
     if (tableBooking) {
@@ -1205,7 +1262,7 @@ function OperatorPage() {
     }
     setBlockBusy(true);
     try {
-      const result = await operatorFloor(token, { op: 'block', tableCode: table.code, date: serviceDateKey(), reason: tableBlockReason });
+      const result = await operatorFloor(token, { op: 'block', tableCode: table.code, date: selectedServiceDate, reason: tableBlockReason });
       if (!result.ok || !result.tableBlock) throw new Error(result.error || 'Table block failed');
       setFloorAction('seat');
       await load(undefined, `Blocked table ${table.code}: ${result.tableBlock.reason}.`);
@@ -1272,11 +1329,14 @@ function OperatorPage() {
                 <span>Lodi service</span>
               </div>
               <div className="resyos-date-controls" aria-label="Date and shift controls">
-                <button type="button" aria-label="Previous service">‹</button>
-                <span>{new Date(serviceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                <button type="button" aria-label="Open date picker">▣</button>
+                <button type="button" aria-label="Previous service" onClick={() => shiftServiceDate(-1)}>‹</button>
+                <label className="resyos-service-date-picker" aria-label="Service date">
+                  <span>{selectedServiceLabel}</span>
+                  <input id="operator-service-date" type="date" value={selectedServiceDate} onChange={event => changeServiceDate(event.target.value)} aria-label="Choose service date" />
+                </label>
+                <button type="button" aria-label="Open date picker" onClick={() => document.getElementById('operator-service-date')?.focus()}>▣</button>
                 <strong>Dinner</strong>
-                <button type="button" aria-label="Next service">›</button>
+                <button type="button" aria-label="Next service" onClick={() => shiftServiceDate(1)}>›</button>
               </div>
               <div className="resyos-mode-controls" aria-label="View controls">
                 {(['floor', 'timeline', 'availability', 'reports'] as const).map(mode => (
@@ -1356,7 +1416,7 @@ function OperatorPage() {
                   <label>Guest name<input value={bookGuestName} onChange={event => setBookGuestName(event.target.value)} aria-label="Operator guest name" /></label>
                   <label>Mobile<input value={bookMobile} onChange={event => setBookMobile(event.target.value)} aria-label="Operator guest mobile" /></label>
                   <div className="operator-book-inline">
-                    <label>Date<input type="date" value={bookDate} onChange={event => setBookDate(event.target.value)} aria-label="Operator booking date" /></label>
+                    <label>Date<input type="date" value={bookDate} onChange={event => changeServiceDate(event.target.value)} aria-label="Operator booking date" /></label>
                     <label>Time<input type="time" value={bookTime} onChange={event => setBookTime(event.target.value)} aria-label="Operator booking time" /></label>
                   </div>
                   <div className="operator-book-inline">
@@ -1456,15 +1516,18 @@ function OperatorPage() {
                     <label>Guest<input value={waitGuestName} onChange={event => setWaitGuestName(event.target.value)} aria-label="Waitlist guest name" /></label>
                     <label>Mobile<input value={waitContact} onChange={event => setWaitContact(event.target.value)} aria-label="Waitlist guest mobile" /></label>
                     <div className="operator-book-inline">
+                      <label>Date<input type="date" value={waitDate} onChange={event => changeServiceDate(event.target.value)} aria-label="Waitlist requested date" /></label>
                       <label>Time<input type="time" value={waitTime} onChange={event => setWaitTime(event.target.value)} aria-label="Waitlist requested time" /></label>
-                      <label>Quote<input type="number" min="0" max="240" value={waitQuote} onChange={event => setWaitQuote(Number(event.target.value))} aria-label="Quoted wait minutes" /></label>
                     </div>
                     <div className="operator-book-inline">
+                      <label>Quote<input type="number" min="0" max="240" value={waitQuote} onChange={event => setWaitQuote(Number(event.target.value))} aria-label="Quoted wait minutes" /></label>
                       <label>Party<select value={waitPartySize} onChange={event => setWaitPartySize(Number(event.target.value))} aria-label="Waitlist party size">{[1, 2, 3, 4, 5, 6, 7, 8].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
+                    </div>
+                    <div className="operator-book-inline">
                       <label>Area<select value={waitSection} onChange={event => setWaitSection(event.target.value as SeatingSection | 'either')} aria-label="Waitlist seating preference"><option value="either">Either</option><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></label>
+                      <span className="operator-service-note">{selectedServiceLabel} dinner</span>
                     </div>
                     <label>Note<textarea value={waitNote} onChange={event => setWaitNote(event.target.value)} maxLength={180} aria-label="Waitlist note" /></label>
-                    <input type="hidden" value={waitDate} readOnly />
                     <button type="submit" disabled={busy || waitBusy}>{waitBusy ? 'Adding...' : 'Add to waitlist'}</button>
                   </form>
                 )}
@@ -1753,7 +1816,7 @@ function OperatorPage() {
                   <section className="availability-board" aria-label="Availability by service time">
                     <div className="timeline-board-head">
                       <h2>Availability</h2>
-                      <span>Demo capacity by half hour</span>
+                      <span>{selectedServiceLabel} dinner capacity by half hour</span>
                     </div>
                     <div className="availability-grid">
                       {capacityBySlot.map(slot => (
@@ -1771,7 +1834,7 @@ function OperatorPage() {
                   <section className="service-report-board" aria-label="Daily cover report">
                     <div className="timeline-board-head">
                       <h2>Live service report</h2>
-                      <span>{new Date(serviceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · Dinner</span>
+                      <span>{selectedServiceLabel} · Dinner</span>
                     </div>
                     <div className="report-hero-grid">
                       <article>

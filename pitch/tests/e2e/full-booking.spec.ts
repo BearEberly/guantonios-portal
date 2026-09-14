@@ -332,6 +332,37 @@ test('operator reports show live service pacing on the iPad', async ({ page, req
   await expect(page.getByLabel('Reports summary')).toContainText('Table utilization');
   await expect(page.getByLabel('Report insights')).toContainText('2 covers');
 });
+
+test('operator service date controls scope the iPad service context', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const guestName = `Service Date ${Date.now()}`;
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: guestName, partySize: 2, section: 'outdoor', time: '19:30' });
+  await apiPost(request, '/api/demo/operator/status', { reference: booking.reference, status: 'seated', tableCode: 'P1' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Choose service date').fill(booking.date);
+
+  await expect(reservationRow(page, booking.reference)).toBeVisible();
+  await expect(page.getByLabel('Service summary').locator('article').filter({ hasText: 'Dine-in covers' })).toContainText('2');
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  await expect(page.locator('.timeline-reservation-card').filter({ hasText: booking.reference })).toBeVisible();
+  await page.getByLabel('View controls').getByRole('button', { name: /^Reports$/i }).click();
+  await expect(page.getByLabel('Daily cover report')).toContainText('2');
+  await expect(page.getByLabel('Table turns report')).toContainText(booking.reference);
+
+  await page.getByLabel('Date and shift controls').getByRole('button', { name: /Next service/i }).click();
+  await expect(page.getByLabel('Service summary').locator('article').filter({ hasText: 'Dine-in covers' })).toContainText('0');
+  await expect(page.getByLabel('Daily cover report')).toContainText('0');
+  await expect(page.getByLabel('Table turns report')).not.toContainText(booking.reference);
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  await expect(page.locator('.timeline-reservation-card').filter({ hasText: booking.reference })).toHaveCount(0);
+
+  await page.getByLabel('Date and shift controls').getByRole('button', { name: /Previous service/i }).click();
+  await expect(reservationRow(page, booking.reference)).toBeVisible();
+});
 test('operator can load and update a guestbook profile on the iPad', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
