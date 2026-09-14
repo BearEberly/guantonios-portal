@@ -21,14 +21,16 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await page.getByLabel('Seating').selectOption('outdoor');
   await page.getByRole('button', { name: /change demo reservation/i }).click();
   await expect(page.getByText(/changed and capacity reallocated/i)).toBeVisible();
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: /cancel demo reservation/i }).click();
-  await expect(page.getByText(/cancelled and capacity returned/i)).toBeVisible();
+  const manageUrl = page.url();
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
   await expect(page.getByText(reference)).toBeVisible();
   await expect(page.getByText(/disabled notification adapter/i)).toBeVisible();
+  await page.goto(manageUrl);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: /cancel demo reservation/i }).click();
+  await expect(page.getByText(/cancelled and capacity returned/i)).toBeVisible();
 });
 
 test('operator can seat a selected party by tapping an open floor table', async ({ page, request }) => {
@@ -47,13 +49,13 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await page.getByRole('button', { name: /open operator view/i }).click();
   await expect(page.getByText(reference)).toBeVisible();
   await page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) }).click();
-  const diningTable = page.getByRole('button', { name: /Table 14, 4 seats/i });
-  await expect(diningTable).toBeVisible();
-  await diningTable.click();
+  const patioTable = page.getByRole('button', { name: /Table P1, 2 seats/i });
+  await expect(patioTable).toBeVisible();
+  await patioTable.click();
 
-  await expect(page.getByText(new RegExp(`Seated ${reference} at table 14`))).toBeVisible();
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
   const selectedParty = page.locator('.selected-party-panel');
-  await expect(selectedParty).toContainText(/2 guests · indoor · table 14/i);
+  await expect(selectedParty).toContainText(/2 guests · outdoor · table P1/i);
   await expect(selectedParty).toContainText('Seated');
 });
 
@@ -83,8 +85,8 @@ test('operator can create and seat a booking from the iPad Book rail', async ({ 
   await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
   await expect(page.getByLabel('Table lane reservation book')).toBeVisible();
   await expect(page.locator('.timeline-reservation-card').filter({ hasText: reference! })).toBeVisible();
-  await page.getByRole('button', { name: new RegExp(`Seat ${reference} at table 14 from 5:00`) }).click();
+  await page.getByRole('button', { name: new RegExp(`Seat ${reference} at table P1 from 5:00`) }).click();
 
-  await expect(page.getByText(new RegExp(`Seated ${reference} at table 14`))).toBeVisible();
-  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · indoor · table 14/i);
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
 });
