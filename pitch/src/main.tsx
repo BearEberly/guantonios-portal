@@ -1180,6 +1180,11 @@ function OperatorPage() {
   const selectedRecentVisits = selectedBookingProfile?.visits?.slice(0, 3) || [];
   const queueMatches = (booking: ReservationSummary & { tableCode?: string; createdAt?: string }) => {
     if (queueFilter === 'Notify' || queueFilter === 'Waitlist') return false;
+    const arrivalState = arrivalStateForBooking(booking, operatorNowMs);
+    if (queueFilter === 'Late') return arrivalState.key === 'late';
+    if (queueFilter === 'Due now') return arrivalState.key === 'due';
+    if (queueFilter === 'Here') return arrivalState.key === 'arrived';
+    if (queueFilter === 'Unseated') return !['seated', 'completed', 'cancelled'].includes(booking.status);
     if (queueFilter === 'Booked') return booking.status === 'confirmed';
     if (queueFilter === 'Seated') return booking.status === 'seated';
     if (queueFilter === 'Done') return booking.status === 'completed';
@@ -1251,6 +1256,12 @@ function OperatorPage() {
       { label: 'Table ready', body: `${selectedWaitlistEntry.guestLabel}, your table is ready. Please check in at the host stand.` },
       { label: 'Wait update', body: `${selectedWaitlistEntry.guestLabel}, your quoted wait is about ${selectedWaitlistEntry.quotedWaitMinutes} minutes.` }
     ] : [])
+  ];
+  const arrivalTriageGroups = [
+    { label: 'Late', stateKey: 'late', count: activeBookings.filter(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'late').length, detail: 'Need attention' },
+    { label: 'Due now', stateKey: 'due', count: activeBookings.filter(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'due').length, detail: 'At this slot' },
+    { label: 'Here', stateKey: 'arrived', count: activeBookings.filter(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'arrived').length, detail: 'Checked in' },
+    { label: 'Unseated', stateKey: 'unseated', count: activeBookings.filter(booking => !['seated', 'completed', 'cancelled'].includes(booking.status)).length, detail: 'Seat next' }
   ];
   const railGroups = [
     { label: 'All', count: bookings.length },
@@ -1524,9 +1535,37 @@ function OperatorPage() {
     setBookDate(selectedServiceDate);
     setBookTime(time);
     setFloorFocusTime(time);
+    setBookSlots([]);
     if (section) setBookSection(section);
     if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
     setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${time}.`);
+  }
+
+  function startOperatorBookFromAvailability(slot: AvailabilityMatrixRow) {
+    const preferredSection: SeatingSection = slot.indoor ? 'indoor' : 'outdoor';
+    const seating = slot.sections.length
+      ? slot.sections.map(section => ({ section, label: section === 'indoor' ? 'Indoor' : 'Patio' }))
+      : [{ section: preferredSection, label: preferredSection === 'indoor' ? 'Indoor' : 'Patio' }];
+    const handoffSlot: AvailabilitySlot = {
+      slotId: `operator_availability_${selectedServiceDate}_${slot.time}_${availabilityPartySize}`,
+      date: selectedServiceDate,
+      time: slot.time,
+      displayTime: slot.slot,
+      partySize: availabilityPartySize,
+      seating,
+      exact: true,
+      startsAt: `${selectedServiceDate}T${slot.time}:00-07:00`,
+      endsAt: `${selectedServiceDate}T${slot.time}:00-07:00`
+    };
+    setActiveRail('Book');
+    setBookDate(selectedServiceDate);
+    setBookTime(slot.time);
+    setFloorFocusTime(slot.time);
+    setBookPartySize(Math.min(Math.max(availabilityPartySize, 1), 8));
+    setBookSection(preferredSection);
+    setBookSlots([handoffSlot]);
+    setBookStatus(`Ready to book ${availabilityPartySize} guests at ${slot.slot} from live availability.`);
+    setStatus(`Ready to book ${availabilityPartySize} guests at ${slot.slot} from Availability.`);
   }
 
   function selectGuestProfile(profile: GuestProfile) {
@@ -1961,6 +2000,21 @@ function OperatorPage() {
                       <button type="button" key={group.label} className={queueFilter === group.label ? 'active' : ''} aria-pressed={queueFilter === group.label} onClick={() => setQueueFilter(group.label)}>
                         <span>{group.label}</span>
                         <strong>{group.count}</strong>
+                      </button>
+                    ))}
+                  </div>}
+                  {activeRail !== 'Guests' && <div className="arrival-triage-strip" aria-label="Arrival triage filters">
+                    {arrivalTriageGroups.map(group => (
+                      <button
+                        type="button"
+                        key={group.label}
+                        className={`arrival-${group.stateKey} ${queueFilter === group.label ? 'active' : ''}`}
+                        aria-pressed={queueFilter === group.label}
+                        onClick={() => { setActiveRail('Floor'); setQueueFilter(group.label); }}
+                      >
+                        <span>{group.label}</span>
+                        <strong>{group.count}</strong>
+                        <small>{group.detail}</small>
                       </button>
                     ))}
                   </div>}
@@ -2494,7 +2548,7 @@ function OperatorPage() {
                             <span className={slot.outdoor ? 'open' : 'closed'}>Patio</span>
                           </div>
                           <small className="availability-cap-note">{slot.pacingRule ? `Cap ${slot.limit}: ${slot.pacingRule.reason}` : `${Math.max(0, slot.limit - slot.covers)} cover slots open`}</small>
-                          <button type="button" disabled={availabilityBusy || !slot.available} onClick={() => seedOperatorBook(slot.time, slot.indoor ? 'indoor' : 'outdoor', availabilityPartySize)}>Book this time</button>
+                          <button type="button" disabled={availabilityBusy || !slot.available} onClick={() => startOperatorBookFromAvailability(slot)}>Book this time</button>
                         </article>
                       ))}
                     </div>

@@ -1125,6 +1125,72 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .queue-tabs span,
 .queue-tabs strong { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 
+.arrival-triage-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.arrival-triage-strip button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  min-height: 50px;
+  padding: 7px 9px;
+  border: 1px solid #34414c;
+  border-radius: 9px;
+  background: #111a22;
+  color: #dbe4ec;
+  text-align: left;
+}
+
+.arrival-triage-strip span {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.arrival-triage-strip strong {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: #f8fbff;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.arrival-triage-strip small {
+  color: #9da8b2;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.arrival-triage-strip button.arrival-late.active,
+.arrival-triage-strip button.arrival-late:hover {
+  border-color: #cf4b48;
+  background: #351c20;
+}
+
+.arrival-triage-strip button.arrival-due.active,
+.arrival-triage-strip button.arrival-due:hover {
+  border-color: #f2c261;
+  background: #302817;
+}
+
+.arrival-triage-strip button.arrival-arrived.active,
+.arrival-triage-strip button.arrival-arrived:hover {
+  border-color: #45b8e8;
+  background: #16303d;
+}
+
+.arrival-triage-strip button.arrival-unseated.active,
+.arrival-triage-strip button.arrival-unseated:hover {
+  border-color: #eef2f5;
+  background: #25313c;
+}
 
 .operator-book-panel {
   display: grid;
@@ -1236,10 +1302,15 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .operator-book-results article {
   display: grid;
   gap: 7px;
-  padding: 9px;
+  padding: 10px;
   border: 1px solid #34414c;
-  border-radius: 9px;
-  background: #26313b;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #2b3844 0%, #202c36 100%);
+}
+
+.operator-book-results article:has(button:not(:disabled)) {
+  border-color: rgba(242, 194, 97, .5);
+  box-shadow: inset 0 0 0 1px rgba(242, 194, 97, .08);
 }
 
 .operator-book-results span,

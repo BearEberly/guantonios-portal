@@ -106,7 +106,7 @@ async function findOpenDemoSlot(request: APIRequestContext, partySize = 2, secti
     const date = laDate(offset);
     const response = await request.post('/api/demo/search', { data: { date, time, partySize, section } });
     const body = await response.json().catch(() => null) as { available?: boolean; slots?: Array<{ date: string; time: string }> } | null;
-    if (response.ok() && body?.available && body.slots?.[0]) return body.slots[0];
+    if (response.ok() && body?.available && body.slots?.[0]) return body.slots.find(slot => slot.time === time) || body.slots[0];
   }
   throw new Error(`No open demo slot found for ${partySize} ${section} ${time}`);
 }
@@ -216,7 +216,60 @@ test('operator Availability board uses live exact inventory for the selected par
   await expect(board).toContainText(/live search for 2-tops/i);
   const openSlot = board.locator('article').filter({ hasText: /Indoor exact|Patio exact|Indoor \+ Patio exact/i }).first();
   await expect(openSlot).toBeVisible();
-  await expect(openSlot.getByRole('button', { name: /Book this time/i })).toBeEnabled();
+  const bookThisTime = openSlot.getByRole('button', { name: /Book this time/i });
+  await expect(bookThisTime).toBeEnabled();
+  await bookThisTime.click();
+
+  await expect(page.getByLabel('Book from operator iPad')).toBeVisible();
+  await expect(page.getByText(/Ready to book 2 guests .* from live availability/i)).toBeVisible();
+  const bookingResults = page.getByLabel('Operator booking availability');
+  await expect(bookingResults.getByRole('button', { name: /Book (Indoor|Patio)/i }).first()).toBeVisible();
+  await page.getByLabel('Operator guest name').fill('Availability Handoff Guest');
+  await bookingResults.getByRole('button', { name: /Book (Indoor|Patio)/i }).first().click();
+
+  await expect(page.getByText(/Booked DEMO-/)).toBeVisible();
+  await expect(page.locator('.operator-row').filter({ hasText: 'Availability Handoff Guest' })).toBeVisible();
+});
+
+test('operator can triage arrivals from the iPad queue', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const stamp = Date.now();
+  const late = await createConfirmedDemoBooking(request, { guestLabel: `Late Triage ${stamp}`, partySize: 2, section: 'outdoor', time: '19:00' });
+  const due = await createConfirmedDemoBooking(request, { guestLabel: `Due Triage ${stamp}`, partySize: 2, section: 'indoor', time: '19:30' });
+  const here = await createConfirmedDemoBooking(request, { guestLabel: `Here Triage ${stamp}`, partySize: 2, section: 'outdoor', time: '20:00' });
+  await apiPost(request, '/api/demo/operator/status', { reference: here.reference, status: 'checked_in' });
+  await page.clock.setFixedTime(new Date(new Date(late.startsAt).getTime() + 20 * 60 * 1000));
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, late.date);
+
+  const triage = page.getByLabel('Arrival triage filters');
+  await expect(triage).toBeVisible();
+  await expect(triage.getByRole('button', { name: /Late\s+1/i })).toBeVisible();
+  await expect(triage.getByRole('button', { name: /Due now\s+1/i })).toBeVisible();
+  await expect(triage.getByRole('button', { name: /Here\s+1/i })).toBeVisible();
+  await expect(triage.getByRole('button', { name: /Unseated\s+3/i })).toBeVisible();
+
+  await triage.getByRole('button', { name: /Late\s+1/i }).click();
+  await expect(reservationRow(page, late.reference)).toBeVisible();
+  await expect(reservationRow(page, due.reference)).toHaveCount(0);
+  await expect(reservationRow(page, here.reference)).toHaveCount(0);
+
+  await triage.getByRole('button', { name: /Due now\s+1/i }).click();
+  await expect(reservationRow(page, due.reference)).toBeVisible();
+  await expect(reservationRow(page, late.reference)).toHaveCount(0);
+
+  await triage.getByRole('button', { name: /Here\s+1/i }).click();
+  await expect(reservationRow(page, here.reference)).toBeVisible();
+  await expect(reservationRow(page, due.reference)).toHaveCount(0);
+
+  await triage.getByRole('button', { name: /Unseated\s+3/i }).click();
+  await expect(reservationRow(page, late.reference)).toBeVisible();
+  await expect(reservationRow(page, due.reference)).toBeVisible();
+  await expect(reservationRow(page, here.reference)).toBeVisible();
 });
 
 test('operator can pace a service slot and restore exact availability', async ({ page, request }) => {
