@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -54,11 +54,27 @@ export function cancelReservation(input: { reference: string; manageToken: strin
 }
 
 export async function operatorList(token: string) {
-  const [state, waitlist] = await Promise.all([
+  const [state, waitlist, guests] = await Promise.all([
     request<OperatorState>('/api/demo/operator/list', {}, token),
-    request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token)
+    request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token),
+    request<{ ok: boolean; profiles: GuestProfile[]; error?: string }>('/api/demo/operator/guest', { op: 'list' }, token)
   ]);
-  return { ...state, waitlist: waitlist.waitlist || [] };
+  const profilesByReference = new Map<string, GuestProfile>();
+  for (const profile of guests.profiles || []) {
+    for (const visit of profile.visits || []) profilesByReference.set(visit.reference, profile);
+  }
+  const bookings = (state.bookings || []).map(booking => {
+    const profile = profilesByReference.get(booking.reference);
+    return profile ? {
+      ...booking,
+      guestProfileId: profile.id,
+      guestTags: profile.tags,
+      guestPreferences: profile.preferences,
+      visitCount: profile.visitCount,
+      privateNotePreview: profile.privateNote ? 'Private note' : ''
+    } : booking;
+  });
+  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [] };
 }
 
 export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
@@ -67,6 +83,15 @@ export function operatorStatus(token: string, reference: string, status: string,
 
 export function operatorWaitlist(token: string, input: { op: 'create'; guestLabel: string; contact?: string; date: string; time: string; partySize: number; section?: SeatingSection | 'either'; quotedWaitMinutes?: number; note?: string } | { op: 'status'; waitlistId: string; status: 'waiting' | 'notified' | 'cancelled' } | { op: 'seat'; waitlistId: string; tableCode: string }) {
   return request<{ ok: boolean; waitlistId?: string; reference?: string; status?: string; tableCode?: string; entry?: WaitlistEntry; error?: string }>('/api/demo/operator/waitlist', input, token);
+}
+
+export function operatorGuest(token: string, input:
+  | { op: 'list' }
+  | { op: 'load'; reference?: string; profileId?: string }
+  | { op: 'attach'; reference: string; guestLabel: string; contact?: string; tags?: string[]; preferences?: string[]; privateNote?: string; note?: string }
+  | { op: 'update'; profileId: string; guestLabel?: string; contact?: string; tags: string[]; preferences: string[]; privateNote: string }
+) {
+  return request<{ ok: boolean; profile?: GuestProfile; profiles?: GuestProfile[]; error?: string }>('/api/demo/operator/guest', input, token);
 }
 
 export function operatorReset(token: string) {

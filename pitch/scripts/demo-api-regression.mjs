@@ -82,6 +82,12 @@ const assignedBooking = assignedList.data.bookings.find(b => b.reference === con
 assert(assignedBooking?.status === 'seated' && assignedBooking?.tableCode === 'P1' && assignedBooking?.section === 'outdoor', 'operator list missing assigned table', assignedList);
 evidence.push(['operator_assign_table', assignTable.status, assignedBooking.tableCode, assignedBooking.status]);
 
+const guestLoad = await post('/api/demo/operator/guest', { op: 'load', reference: confirm.data.reference }, operatorToken);
+assert(guestLoad.status === 200 && guestLoad.data.profile?.id && guestLoad.data.profile.visits.some(v => v.reference === confirm.data.reference), 'guest profile load failed', guestLoad);
+const guestUpdate = await post('/api/demo/operator/guest', { op: 'update', profileId: guestLoad.data.profile.id, tags: ['VIP', 'Patio'], preferences: ['Sparkling water'], privateNote: 'Seat near the pizza oven when possible.' }, operatorToken);
+assert(guestUpdate.status === 200 && guestUpdate.data.profile.tags.includes('VIP') && guestUpdate.data.profile.preferences.includes('Sparkling water') && guestUpdate.data.profile.privateNote.includes('pizza oven'), 'guest profile update failed', guestUpdate);
+evidence.push(['operator_guest_profile', guestUpdate.status, guestUpdate.data.profile.tags.join('|'), guestUpdate.data.profile.visitCount]);
+
 const change = await post('/api/demo/change', { reference: confirm.data.reference, manageToken: confirm.data.manageToken, date: open.date, time: '18:00', partySize: 2, section: 'outdoor' });
 assert(change.status === 200 && change.data.reservation.section === 'outdoor', 'change failed', change);
 evidence.push(['change', change.status, change.data.reservation.section]);
@@ -120,7 +126,11 @@ if (supabaseUrl && supabaseAnonKey) {
     headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
   });
   assert(directWaitlist.status >= 400, 'anon key should not directly read reservation_demo.waitlist_entries', directWaitlist.status);
-  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status]);
+  const directGuests = await fetch(`${supabaseUrl}/rest/v1/guest_profiles?select=id&limit=1`, {
+    headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
+  });
+  assert(directGuests.status >= 400, 'anon key should not directly read reservation_demo.guest_profiles', directGuests.status);
+  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status]);
 }
 
 console.log(JSON.stringify({ ok: true, base, evidence }, null, 2));

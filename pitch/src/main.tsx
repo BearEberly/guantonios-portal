@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, operatorList, operatorReset, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
+import { cancelReservation, changeReservation, confirmReservation, createHold, operatorGuest, operatorList, operatorReset, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -452,6 +452,14 @@ function OperatorPage() {
   const [waitQuote, setWaitQuote] = useState(25);
   const [waitNote, setWaitNote] = useState('Walk-in from the host stand.');
   const [waitBusy, setWaitBusy] = useState(false);
+  const [selectedGuestProfileId, setSelectedGuestProfileId] = useState<string | null>(null);
+  const [profileNameDraft, setProfileNameDraft] = useState('');
+  const [profileContactDraft, setProfileContactDraft] = useState('');
+  const [profileTagsDraft, setProfileTagsDraft] = useState('');
+  const [profilePreferencesDraft, setProfilePreferencesDraft] = useState('');
+  const [profileNoteDraft, setProfileNoteDraft] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileDraftForId, setProfileDraftForId] = useState<string | null>(null);
 
   async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
     event?.preventDefault();
@@ -474,8 +482,7 @@ function OperatorPage() {
     try {
       const result = await operatorStatus(token, reference, nextStatus, tableCode);
       if (!result.ok) throw new Error(result.error || 'Operator update failed');
-      setSelectedReference(reference);
-      setSelectedWaitlistId(null);
+      selectReservation(reference);
       if (nextStatus === 'seated') setQueueFilter('Seated');
       if (nextStatus === 'completed') setQueueFilter('Done');
       if (nextStatus === 'cancelled') setQueueFilter('No-show');
@@ -495,6 +502,8 @@ function OperatorPage() {
       await operatorReset(token);
       setSelectedReference(null);
       setSelectedWaitlistId(null);
+      setSelectedGuestProfileId(null);
+      setProfileDraftForId(null);
       setQueueFilter('All');
       await load(undefined, 'Synthetic demo data reset.');
     } catch (error) {
@@ -545,8 +554,16 @@ function OperatorPage() {
         request: bookNote || 'Booked from the operator iPad demo.'
       });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Confirm failed');
-      setSelectedReference(result.reference);
-      setSelectedWaitlistId(null);
+      await operatorGuest(token, {
+        op: 'attach',
+        reference: result.reference,
+        guestLabel: bookGuestName.trim() || 'Operator Guest',
+        contact: normalizeDemoMobile(bookMobile),
+        tags: ['Operator'],
+        preferences: [section],
+        privateNote: bookNote || 'Booked from the operator iPad demo.'
+      });
+      selectReservation(result.reference);
       setQueueFilter('Booked');
       setOperatorMode('floor');
       setActiveRail('Floor');
@@ -582,6 +599,7 @@ function OperatorPage() {
       if (!result.ok || !result.waitlistId) throw new Error(result.error || 'Waitlist add failed');
       setSelectedWaitlistId(result.waitlistId);
       setSelectedReference(null);
+      setSelectedGuestProfileId(null);
       setQueueFilter('Waitlist');
       setActiveRail('Wait');
       setOperatorMode('floor');
@@ -610,6 +628,7 @@ function OperatorPage() {
   async function startWaitlistSeating(entry: WaitlistEntry) {
     setSelectedWaitlistId(entry.id);
     setSelectedReference(null);
+    setSelectedGuestProfileId(null);
     setMovingReference(null);
     setOperatorMode('floor');
     setActiveRail('Wait');
@@ -630,8 +649,16 @@ function OperatorPage() {
     try {
       const result = await operatorWaitlist(token, { op: 'seat', waitlistId: entry.id, tableCode: table.code });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Waitlist seating failed');
-      setSelectedWaitlistId(null);
-      setSelectedReference(result.reference);
+      await operatorGuest(token, {
+        op: 'attach',
+        reference: result.reference,
+        guestLabel: entry.guestLabel,
+        contact: normalizeDemoMobile(entry.contact || ''),
+        tags: ['Walk-in'],
+        preferences: [entry.section || 'either'],
+        privateNote: entry.note || 'Seated from the iPad waitlist.'
+      });
+      selectReservation(result.reference);
       setQueueFilter('Seated');
       setActiveRail('Floor');
       await load(undefined, `Seated waitlist party ${result.reference} at table ${table.code}.`);
@@ -645,6 +672,7 @@ function OperatorPage() {
   const bookings = state?.bookings || [];
   const holds = state?.holds || [];
   const waitlist = state?.waitlist || [];
+  const profiles = state?.profiles || [];
   const notifications = state?.notifications || [];
   const serviceDate = bookings[0]?.startsAt || holds[0]?.startsAt || waitlist[0]?.startsAt || new Date().toISOString();
   const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
@@ -658,6 +686,23 @@ function OperatorPage() {
   const explicitSelectedBooking = selectedReference ? bookings.find(booking => booking.reference === selectedReference) || null : null;
   const selectedWaitlistEntry = selectedWaitlistId ? waitlist.find(entry => entry.id === selectedWaitlistId) || null : null;
   const selectedBooking = selectedWaitlistEntry ? null : explicitSelectedBooking || activeBookings[0] || bookings[0] || null;
+  const selectedGuestProfile = selectedGuestProfileId ? profiles.find(profile => profile.id === selectedGuestProfileId) || null : null;
+  const selectedBookingProfile = selectedBooking?.guestProfileId ? profiles.find(profile => profile.id === selectedBooking.guestProfileId) || null : null;
+  const activeGuestProfile = selectedGuestProfile || selectedBookingProfile || null;
+
+  useEffect(() => {
+    if (!activeGuestProfile) {
+      if (profileDraftForId !== null) setProfileDraftForId(null);
+      return;
+    }
+    if (profileDraftForId === activeGuestProfile.id) return;
+    setProfileNameDraft(activeGuestProfile.guestLabel);
+    setProfileContactDraft(activeGuestProfile.contact || '');
+    setProfileTagsDraft(activeGuestProfile.tags.join(', '));
+    setProfilePreferencesDraft(activeGuestProfile.preferences.join(', '));
+    setProfileNoteDraft(activeGuestProfile.privateNote || '');
+    setProfileDraftForId(activeGuestProfile.id);
+  }, [activeGuestProfile, profileDraftForId]);
   const floorTables = [
     { code: '12', section: 'Dining Room', seats: 2, shape: 'round', x: 11, y: 18, w: 12, h: 17 },
     { code: '14', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 18, w: 13, h: 18 },
@@ -721,6 +766,13 @@ function OperatorPage() {
   const visibleWaitlist = queueFilter === 'Waitlist' ? openWaitlist.filter(entry => waitlistPartyMatches(entry) && waitlistMatches(entry)) : [];
   const visibleHolds = queueFilter === 'Waitlist' ? openHolds : [];
   const visibleNotifications = queueFilter === 'Notify' ? notifications : [];
+  const profileMatches = (profile: GuestProfile) => {
+    const query = queueSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [profile.guestLabel, profile.contact || '', ...profile.tags, ...profile.preferences, ...profile.visits.map(visit => visit.reference)]
+      .some(value => value.toLowerCase().includes(query));
+  };
+  const visibleProfiles = profiles.filter(profileMatches);
   const railGroups = [
     { label: 'All', count: bookings.length },
     { label: 'Notify', count: previewCount },
@@ -737,7 +789,7 @@ function OperatorPage() {
     { icon: 'book', label: 'Book', count: bookedCount },
     { icon: 'floor', label: 'Floor', count: activeBookings.length },
     { icon: 'wait', label: 'Wait', count: waitlistCount },
-    { icon: 'guest', label: 'Guests', count: bookings.length },
+    { icon: 'guest', label: 'Guests', count: profiles.length },
     { icon: 'reports', label: 'Reports', count: previewCount }
   ];
   const sectionNames = ['Dining Room', 'Patio'];
@@ -797,17 +849,63 @@ function OperatorPage() {
       return;
     }
     if (label === 'Guests') {
-      setQueueFilter('All');
+      setSelectedReference(null);
+      setSelectedWaitlistId(null);
+      if (!activeGuestProfile && profiles[0]) selectGuestProfile(profiles[0]);
       return;
     }
     setQueueFilter('Notify');
   }
+  function selectReservation(reference: string) {
+    setSelectedReference(reference);
+    setSelectedWaitlistId(null);
+    setSelectedGuestProfileId(null);
+  }
+
   function seedOperatorBook(time: string, section?: SeatingSection, partySize?: number) {
     setActiveRail('Book');
     setBookTime(time);
     if (section) setBookSection(section);
     if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
     setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${time}.`);
+  }
+
+  function selectGuestProfile(profile: GuestProfile) {
+    setSelectedGuestProfileId(profile.id);
+    setSelectedReference(null);
+    setSelectedWaitlistId(null);
+    setProfileNameDraft(profile.guestLabel);
+    setProfileContactDraft(profile.contact || '');
+    setProfileTagsDraft(profile.tags.join(', '));
+    setProfilePreferencesDraft(profile.preferences.join(', '));
+    setProfileNoteDraft(profile.privateNote || '');
+    setProfileDraftForId(profile.id);
+    setActiveRail('Guests');
+    setStatus(`Opened ${profile.guestLabel}'s guest profile.`);
+  }
+
+  async function saveGuestProfile(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!activeGuestProfile) return;
+    setProfileBusy(true);
+    try {
+      const result = await operatorGuest(token, {
+        op: 'update',
+        profileId: activeGuestProfile.id,
+        guestLabel: profileNameDraft || activeGuestProfile.guestLabel,
+        contact: profileContactDraft,
+        tags: profileListFromText(profileTagsDraft),
+        preferences: profileListFromText(profilePreferencesDraft),
+        privateNote: profileNoteDraft
+      });
+      if (!result.ok) throw new Error(result.error || 'Profile update failed');
+      setSelectedGuestProfileId(activeGuestProfile.id);
+      await load(undefined, `Updated ${profileNameDraft || activeGuestProfile.guestLabel}'s guest profile.`);
+    } catch (error) {
+      setStatus(`Profile update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setProfileBusy(false);
+    }
   }
   const movingBooking = movingReference ? bookings.find(booking => booking.reference === movingReference) || null : null;
   const moveCandidate = movingBooking || explicitSelectedBooking;
@@ -819,8 +917,7 @@ function OperatorPage() {
   const canSeatAtTable = (table: (typeof floorTables)[number]) => moveCandidate ? canSeatBookingAtTable(moveCandidate, table) : canSeatWaitlistAtTable(waitlistSeatCandidate, table);
 
   function beginMoveMode(booking: ReservationSummary) {
-    setSelectedReference(booking.reference);
-    setSelectedWaitlistId(null);
+    selectReservation(booking.reference);
     setMovingReference(booking.reference);
     setOperatorMode('floor');
     setActiveRail('Floor');
@@ -832,8 +929,7 @@ function OperatorPage() {
       event.preventDefault();
       return;
     }
-    setSelectedReference(booking.reference);
-    setSelectedWaitlistId(null);
+    selectReservation(booking.reference);
     setMovingReference(booking.reference);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', booking.reference);
@@ -870,8 +966,7 @@ function OperatorPage() {
   async function seatBookingAtTable(booking: ReservationSummary, table: (typeof floorTables)[number], fromDrag = false) {
     const tableBooking = bookingsByTable.get(table.code);
     if (tableBooking && tableBooking.reference !== booking.reference) {
-      setSelectedReference(tableBooking.reference);
-      setSelectedWaitlistId(null);
+      selectReservation(tableBooking.reference);
       setStatus(`Selected ${tableBooking.reference} at table ${table.code}.`);
       return;
     }
@@ -900,6 +995,7 @@ function OperatorPage() {
     seedOperatorBook(bookTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats);
     setStatus(`Started a ${table.seats}-top booking search from open table ${table.code}.`);
   }
+
 
   return (
     <main className="operator-page">
@@ -979,6 +1075,7 @@ function OperatorPage() {
               <article><span>Checked in</span><strong>{checkInCount}</strong></article>
               <article><span>Seated</span><strong>{seatedCount}</strong></article>
               <article><span>Waitlist</span><strong>{waitlistCount}</strong></article>
+              <article><span>Profiles</span><strong>{profiles.length}</strong></article>
               <article><span>Text previews</span><strong>{previewCount}</strong></article>
             </section>
             <section className="resyos-workbench">
@@ -987,16 +1084,16 @@ function OperatorPage() {
                 <>
                   <label className="queue-search">
                     <span className="sr-only">Search guest or reference</span>
-                    <input value={queueSearch} onChange={event => setQueueSearch(event.target.value)} placeholder="Search guest or reference" aria-label="Search guest or reference" />
+                    <input value={queueSearch} onChange={event => setQueueSearch(event.target.value)} placeholder={activeRail === 'Guests' ? 'Search guestbook' : 'Search guest or reference'} aria-label={activeRail === 'Guests' ? 'Search guestbook' : 'Search guest or reference'} />
                   </label>
-                  <div className="queue-tabs" aria-label="Reservation queues">
+                  {activeRail !== 'Guests' && <div className="queue-tabs" aria-label="Reservation queues">
                     {railGroups.map(group => (
                       <button type="button" key={group.label} className={queueFilter === group.label ? 'active' : ''} aria-pressed={queueFilter === group.label} onClick={() => setQueueFilter(group.label)}>
                         <span>{group.label}</span>
                         <strong>{group.count}</strong>
                       </button>
                     ))}
-                  </div>
+                  </div>}
                 </>
               )}
               {activeRail === 'Book' ? (
@@ -1030,6 +1127,36 @@ function OperatorPage() {
                       {slot.seating.map(choice => (
                         <button type="button" key={`${slot.slotId}-${choice.section}`} disabled={busy || bookBusy} onClick={() => bookOperatorSlot(slot, choice.section)} aria-label={`Book ${choice.label} at ${slot.displayTime}`}>Book {choice.label}</button>
                       ))}
+                    </article>
+                  ))}
+                </div>
+              </div>
+              ) : activeRail === 'Guests' ? (
+              <div className="guestbook-panel" aria-label="Guestbook profiles">
+                <div className="section-heading">
+                  <div>
+                    <h2>Guestbook</h2>
+                    <p>{visibleProfiles.length} visible profiles · {profiles.length} synthetic guest records.</p>
+                  </div>
+                </div>
+                {profiles.length === 0 && <p>No guest profiles yet. Book from the iPad or seat a waitlist party to create one.</p>}
+                {profiles.length > 0 && visibleProfiles.length === 0 && <p>No profiles match this search.</p>}
+                <div className="guest-profile-list">
+                  {visibleProfiles.map(profile => (
+                    <article key={profile.id} className={`guest-profile-card ${activeGuestProfile?.id === profile.id ? 'selected' : ''}`}>
+                      <button type="button" className="guest-profile-select" onClick={() => selectGuestProfile(profile)} aria-label={`Open guest profile ${profile.guestLabel}`}>
+                        <strong>{profile.guestLabel}</strong>
+                        <span>{profile.contact || 'No mobile'} · {profile.visitCount} {profile.visitCount === 1 ? 'visit' : 'visits'}</span>
+                      </button>
+                      <div className="guest-profile-meta">
+                        <span>{profile.upcomingCount} active</span>
+                        {profile.lastVisitAt && <span>Last {formatLocalTime(profile.lastVisitAt)}</span>}
+                      </div>
+                      <div className="operator-tags" aria-label={`${profile.guestLabel} tags`}>
+                        {(profile.tags.length ? profile.tags : ['Guest']).map(tag => <span key={`${profile.id}-tag-${tag}`}>{tag}</span>)}
+                        {(profile.preferences.length ? profile.preferences : []).slice(0, 2).map(pref => <span key={`${profile.id}-pref-${pref}`}>{pref}</span>)}
+                      </div>
+                      {profile.visits[0] && <p>{profile.visits[0].reference} · {profile.visits[0].partySize} guests · {statusLabel(profile.visits[0].status)}</p>}
                     </article>
                   ))}
                 </div>
@@ -1072,7 +1199,7 @@ function OperatorPage() {
                     <button
                       type="button"
                       className="operator-row-select"
-                      onClick={() => { setSelectedWaitlistId(entry.id); setSelectedReference(null); }}
+                      onClick={() => { setSelectedWaitlistId(entry.id); setSelectedReference(null); setSelectedGuestProfileId(null); }}
                       aria-label={`Select waitlist ${entry.guestLabel}`}
                     >
                       <span className="sr-only">Select waitlist party</span>
@@ -1138,7 +1265,7 @@ function OperatorPage() {
                       draggable={canMoveBooking(booking)}
                       onDragStart={event => beginReservationDrag(event, booking)}
                       onDragEnd={endReservationDrag}
-                      onClick={() => { setSelectedReference(booking.reference); setSelectedWaitlistId(null); }}
+                      onClick={() => selectReservation(booking.reference)}
                       aria-label={`Select ${booking.guestLabel || 'Demo Guest'} ${booking.reference}`}
                     >
                       <span className="sr-only">Select reservation</span>
@@ -1152,9 +1279,10 @@ function OperatorPage() {
                       <span>{booking.partySize} guests · {booking.section} · table {booking.tableCode || 'pending'}</span>
                     </div>
                     <div className="operator-tags" aria-label="Guest service notes">
-                      <span>First visit</span>
+                      {(booking.guestTags?.length ? booking.guestTags.slice(0, 2) : [booking.visitCount && booking.visitCount > 1 ? `${booking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
                       <span>{booking.section}</span>
                       <span>{booking.partySize} top</span>
+                      {booking.privateNotePreview && <span>Private note</span>}
                     </div>
                     <span className="status-pill">{statusLabel(booking.status)}</span>
                     <div className="operator-actions">
@@ -1282,7 +1410,7 @@ function OperatorPage() {
                                         draggable={canMoveBooking(booking)}
                                         onDragStart={event => beginReservationDrag(event, booking)}
                                         onDragEnd={endReservationDrag}
-                                        onClick={() => { setSelectedReference(booking.reference); setSelectedWaitlistId(null); }}
+                                        onClick={() => selectReservation(booking.reference)}
                                         aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, table ${booking.tableCode || 'pending'}`}
                                       >
                                         <span>{formatLocalTime(booking.startsAt)}</span>
@@ -1318,7 +1446,7 @@ function OperatorPage() {
                                       draggable={canMoveBooking(booking)}
                                       onDragStart={event => beginReservationDrag(event, booking)}
                                       onDragEnd={endReservationDrag}
-                                      onClick={() => { setSelectedReference(booking.reference); setSelectedWaitlistId(null); }}
+                                      onClick={() => selectReservation(booking.reference)}
                                       aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, pending table`}
                                     >
                                       <span>{formatLocalTime(booking.startsAt)}</span>
@@ -1379,14 +1507,26 @@ function OperatorPage() {
                   <h2 id="selected-party-title">Selected party</h2>
                   <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
                   <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                  <div className="profile-chip-row" aria-label="Selected guest quick tags">
+                    {(selectedBooking.guestTags?.length ? selectedBooking.guestTags.slice(0, 3) : [selectedBooking.visitCount && selectedBooking.visitCount > 1 ? `${selectedBooking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
+                  </div>
+                  {selectedBookingProfile && (
+                    <div className="profile-mini-card">
+                      <span>{selectedBookingProfile.visitCount} {selectedBookingProfile.visitCount === 1 ? 'visit' : 'visits'}</span>
+                      <strong>{selectedBookingProfile.tags.join(', ') || 'Guest profile'}</strong>
+                      {selectedBookingProfile.privateNote && <p>{selectedBookingProfile.privateNote}</p>}
+                    </div>
+                  )}
                   <div className="side-actions">
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
                     <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
+                    <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
                   </div>
                   {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
                 </section>
               )}
+
               {selectedWaitlistEntry && (
                 <section aria-labelledby="selected-waitlist-title" className="selected-party-panel waitlist-selected move-mode">
                   <h2 id="selected-waitlist-title">Selected waitlist</h2>
@@ -1398,6 +1538,27 @@ function OperatorPage() {
                     <button disabled={busy || waitBusy} onClick={() => updateWaitlistStatus(selectedWaitlistEntry, 'cancelled')}>Cancel</button>
                   </div>
                   <p className="move-hint">Tap an open highlighted table to seat this walk-in.</p>
+                </section>
+              )}
+              {activeGuestProfile && (
+                <section aria-label="Guestbook profile" className="guest-profile-editor">
+                  <h2 id="guest-profile-title">Guest profile</h2>
+                  <strong>{activeGuestProfile.guestLabel}</strong>
+                  <p>{activeGuestProfile.contact || 'No mobile'} · {activeGuestProfile.visitCount} {activeGuestProfile.visitCount === 1 ? 'visit' : 'visits'} · {activeGuestProfile.upcomingCount} active</p>
+                  <form onSubmit={saveGuestProfile}>
+                    <label>Name<input value={profileNameDraft} onChange={event => setProfileNameDraft(event.target.value)} aria-label="Guest profile name" /></label>
+                    <label>Mobile<input value={profileContactDraft} onChange={event => setProfileContactDraft(event.target.value)} aria-label="Guest profile mobile" /></label>
+                    <label>Tags<input value={profileTagsDraft} onChange={event => setProfileTagsDraft(event.target.value)} aria-label="Guest profile tags" /></label>
+                    <label>Preferences<input value={profilePreferencesDraft} onChange={event => setProfilePreferencesDraft(event.target.value)} aria-label="Guest profile preferences" /></label>
+                    <label>Private note<textarea value={profileNoteDraft} onChange={event => setProfileNoteDraft(event.target.value)} maxLength={400} aria-label="Guest profile private note" /></label>
+                    <button type="submit" disabled={profileBusy}>{profileBusy ? 'Saving...' : 'Save profile'}</button>
+                  </form>
+                  <div className="guest-visit-history" aria-label="Guest visit history">
+                    <strong>Recent visits</strong>
+                    {activeGuestProfile.visits.length === 0 ? <p>No visits attached yet.</p> : activeGuestProfile.visits.map(visit => (
+                      <p key={visit.reference}>{visit.reference} · {formatLocalTime(visit.startsAt)} · {visit.partySize} guests · {visit.tableCode || 'pending'} · {statusLabel(visit.status)}</p>
+                    ))}
+                  </div>
                 </section>
               )}
               <section aria-labelledby="holds-title">
@@ -1417,6 +1578,10 @@ function OperatorPage() {
   );
 }
 
+
+function profileListFromText(value: string) {
+  return Array.from(new Set(value.split(',').map(item => item.trim()).filter(Boolean))).slice(0, 8);
+}
 
 function normalizeDemoMobile(value: string) {
   const digits = value.replace(/\D/g, '');
