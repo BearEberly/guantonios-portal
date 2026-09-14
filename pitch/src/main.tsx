@@ -417,6 +417,8 @@ function ManagePage() {
   );
 }
 
+type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Reports';
+
 function OperatorPage() {
   const [token, setToken] = useState(sessionStorage.getItem('demoOperatorToken') || '');
   const [state, setState] = useState<OperatorState | null>(null);
@@ -424,9 +426,20 @@ function OperatorPage() {
   const [busy, setBusy] = useState(false);
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
   const [operatorMode, setOperatorMode] = useState<'floor' | 'timeline' | 'availability'>('floor');
+  const [activeRail, setActiveRail] = useState<OperatorRailSection>('Floor');
   const [queueFilter, setQueueFilter] = useState('All');
   const [partySizeFilter, setPartySizeFilter] = useState<number | '7+' | null>(null);
   const [queueSearch, setQueueSearch] = useState('');
+  const [bookDate, setBookDate] = useState(nextBookableDate());
+  const [bookTime, setBookTime] = useState('19:30');
+  const [bookPartySize, setBookPartySize] = useState(2);
+  const [bookSection, setBookSection] = useState<SeatingSection | 'either'>('indoor');
+  const [bookGuestName, setBookGuestName] = useState('Operator Guest');
+  const [bookMobile, setBookMobile] = useState('(209) 555-0100');
+  const [bookNote, setBookNote] = useState('Booked from the operator iPad demo.');
+  const [bookSlots, setBookSlots] = useState<AvailabilitySlot[]>([]);
+  const [bookStatus, setBookStatus] = useState('Search live demo availability before booking from the iPad.');
+  const [bookBusy, setBookBusy] = useState(false);
 
   async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
     event?.preventDefault();
@@ -471,6 +484,64 @@ function OperatorPage() {
     } catch (error) {
       setStatus(`Reset failed: ${error instanceof Error ? error.message : 'Try again.'}`);
       setBusy(false);
+    }
+  }
+
+
+  async function runOperatorBookSearch(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    setBookBusy(true);
+    setBookStatus('Searching current demo availability...');
+    try {
+      const result = await searchAvailability({ date: bookDate, time: bookTime, partySize: bookPartySize, ...(bookSection === 'either' ? {} : { section: bookSection }) });
+      if (!result.ok) throw new Error(result.error || 'Search failed');
+      setBookSlots(result.slots || []);
+      const message = result.slots.length
+        ? `Found ${result.slots.length} demo time ${result.slots.length === 1 ? 'option' : 'options'} for ${bookPartySize}.`
+        : noAvailabilityCopy(result.reason);
+      setBookStatus(message);
+      setStatus(message);
+    } catch (error) {
+      const message = `Book search failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setBookStatus(message);
+      setStatus(message);
+    } finally {
+      setBookBusy(false);
+    }
+  }
+
+  async function bookOperatorSlot(slot: AvailabilitySlot, section: SeatingSection) {
+    setBookBusy(true);
+    setStatus(`Holding ${slot.displayTime} ${section} for ${bookPartySize}.`);
+    setBookStatus(`Holding ${slot.displayTime} ${section} for ${bookPartySize}.`);
+    try {
+      const hold = await createHold({ date: slot.date, time: slot.time, partySize: bookPartySize, section, idempotencyKey: makeIdempotencyKey('operator_hold') });
+      if (!hold.ok || !hold.holdId || !hold.holdToken) throw new Error(hold.error || 'Hold failed');
+      const [firstName, ...lastParts] = bookGuestName.trim().split(/\s+/).filter(Boolean);
+      const result = await confirmReservation({
+        holdId: hold.holdId,
+        holdToken: hold.holdToken,
+        idempotencyKey: makeIdempotencyKey('operator_confirm'),
+        firstName: firstName || 'Operator',
+        lastName: lastParts.join(' ') || 'Guest',
+        email: `operator.${Date.now()}@demo.guantonios.local`,
+        mobile: normalizeDemoMobile(bookMobile),
+        request: bookNote || 'Booked from the operator iPad demo.'
+      });
+      if (!result.ok || !result.reference) throw new Error(result.error || 'Confirm failed');
+      setSelectedReference(result.reference);
+      setQueueFilter('Booked');
+      setOperatorMode('floor');
+      setActiveRail('Floor');
+      setBookSlots([]);
+      setBookStatus(`Booked ${result.reference} for ${bookPartySize} at ${slot.displayTime}.`);
+      await load(undefined, `Booked ${result.reference} for ${bookPartySize} at ${slot.displayTime}.`);
+    } catch (error) {
+      const message = `Book failed: ${error instanceof Error ? error.message : 'Try again.'}`;
+      setBookStatus(message);
+      setStatus(message);
+    } finally {
+      setBookBusy(false);
     }
   }
 
@@ -533,18 +604,26 @@ function OperatorPage() {
   };
   const visibleBookings = bookings.filter(booking => queueMatches(booking) && partyMatches(booking) && searchMatches(booking));
   const visibleActiveCovers = visibleBookings.filter(booking => !['cancelled', 'completed'].includes(booking.status)).reduce((total, booking) => total + booking.partySize, 0);
-  const visibleHolds = queueFilter === 'Waitlist' ? holds : [];
+  const openHolds = holds.filter(hold => !['confirmed', 'cancelled', 'expired'].includes(hold.status));
+  const visibleHolds = queueFilter === 'Waitlist' ? openHolds : [];
   const visibleNotifications = queueFilter === 'Notify' ? notifications : [];
   const railGroups = [
     { label: 'All', count: bookings.length },
     { label: 'Notify', count: previewCount },
-    { label: 'Waitlist', count: holds.length },
+    { label: 'Waitlist', count: openHolds.length },
     { label: 'Booked', count: bookedCount },
     { label: 'Seated', count: seatedCount },
     { label: 'Done', count: bookings.filter(booking => booking.status === 'completed').length },
     { label: 'No-show', count: bookings.filter(booking => booking.status === 'cancelled').length }
   ];
   const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
+  const railItems: Array<{ icon: string; label: OperatorRailSection; count: number }> = [
+    { icon: 'book', label: 'Book', count: bookedCount },
+    { icon: 'floor', label: 'Floor', count: activeBookings.length },
+    { icon: 'wait', label: 'Wait', count: openHolds.length },
+    { icon: 'guest', label: 'Guests', count: bookings.length },
+    { icon: 'reports', label: 'Reports', count: previewCount }
+  ];
   const sectionNames = ['Dining Room', 'Patio'];
   const timelineBookings = [...visibleBookings].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const capacityBySlot = timeSlots.map((slot, index) => {
@@ -555,8 +634,33 @@ function OperatorPage() {
       .filter(booking => !['cancelled', 'completed'].includes(booking.status))
       .filter(booking => new Date(booking.startsAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Los_Angeles' }) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
-    return { slot, covers, remaining: Math.max(0, 10 - covers) };
+    return { slot, time: slotTime, covers, remaining: Math.max(0, 10 - covers) };
   });
+  function selectOperatorRail(label: OperatorRailSection) {
+    setActiveRail(label);
+    if (label === 'Book') return;
+    if (label === 'Floor') {
+      setOperatorMode('floor');
+      setQueueFilter('All');
+      return;
+    }
+    if (label === 'Wait') {
+      setQueueFilter('Waitlist');
+      return;
+    }
+    if (label === 'Guests') {
+      setQueueFilter('All');
+      return;
+    }
+    setQueueFilter('Notify');
+  }
+  function seedOperatorBook(time: string, section?: SeatingSection, partySize?: number) {
+    setActiveRail('Book');
+    setBookTime(time);
+    if (section) setBookSection(section);
+    if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
+    setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${time}.`);
+  }
   const selectedPartyCanMove = Boolean(selectedBooking && !['cancelled', 'completed'].includes(selectedBooking.status));
   const canSeatAtTable = (table: (typeof floorTables)[number]) => Boolean(selectedBooking && selectedPartyCanMove && selectedBooking.partySize <= table.seats);
   async function seatSelectedAtTable(table: (typeof floorTables)[number]) {
@@ -567,7 +671,8 @@ function OperatorPage() {
       return;
     }
     if (!selectedBooking) {
-      setStatus(`Table ${table.code} is open. Select a party first.`);
+      seedOperatorBook(bookTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats);
+      setStatus(`Started a ${table.seats}-top booking search from open table ${table.code}.`);
       return;
     }
     if (!selectedPartyCanMove) {
@@ -603,14 +708,8 @@ function OperatorPage() {
         <section className="resyos-shell" aria-label="ResyOS style service console">
           <h1 className="sr-only">Tonight's demo service</h1>
           <nav className="resyos-app-rail" aria-label="Operator sections">
-            {[
-              { icon: 'book', label: 'Book', count: bookedCount },
-              { icon: 'floor', label: 'Floor', count: activeBookings.length },
-              { icon: 'wait', label: 'Wait', count: holds.length },
-              { icon: 'guest', label: 'Guests', count: bookings.length },
-              { icon: 'reports', label: 'Reports', count: previewCount }
-            ].map((item, index) => (
-              <button type="button" key={item.label} className={index === 1 ? 'active' : ''} aria-label={item.label} aria-pressed={index === 1}>
+            {railItems.map(item => (
+              <button type="button" key={item.label} className={activeRail === item.label ? 'active' : ''} aria-label={item.label} aria-pressed={activeRail === item.label} onClick={() => selectOperatorRail(item.label)}>
                 <span aria-hidden="true"><OperatorIcon name={item.icon} /></span>
                 <small>{item.label}</small>
                 {item.count > 0 && <strong>{item.count}</strong>}
@@ -668,18 +767,58 @@ function OperatorPage() {
             </section>
             <section className="resyos-workbench">
               <aside className="resyos-left-rail" aria-label="Guest queues">
-              <label className="queue-search">
-                <span className="sr-only">Search guest or reference</span>
-                <input value={queueSearch} onChange={event => setQueueSearch(event.target.value)} placeholder="Search guest or reference" aria-label="Search guest or reference" />
-              </label>
-              <div className="queue-tabs" aria-label="Reservation queues">
-                {railGroups.map(group => (
-                  <button type="button" key={group.label} className={queueFilter === group.label ? 'active' : ''} aria-pressed={queueFilter === group.label} onClick={() => setQueueFilter(group.label)}>
-                    <span>{group.label}</span>
-                    <strong>{group.count}</strong>
-                  </button>
-                ))}
+              {activeRail !== 'Book' && (
+                <>
+                  <label className="queue-search">
+                    <span className="sr-only">Search guest or reference</span>
+                    <input value={queueSearch} onChange={event => setQueueSearch(event.target.value)} placeholder="Search guest or reference" aria-label="Search guest or reference" />
+                  </label>
+                  <div className="queue-tabs" aria-label="Reservation queues">
+                    {railGroups.map(group => (
+                      <button type="button" key={group.label} className={queueFilter === group.label ? 'active' : ''} aria-pressed={queueFilter === group.label} onClick={() => setQueueFilter(group.label)}>
+                        <span>{group.label}</span>
+                        <strong>{group.count}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {activeRail === 'Book' ? (
+              <div className="operator-book-panel" aria-label="Book from operator iPad">
+                <div className="section-heading">
+                  <div>
+                    <h2>Book a party</h2>
+                    <p>Create a synthetic reservation from the internal iPad console.</p>
+                  </div>
+                </div>
+                <form className="operator-book-form" onSubmit={runOperatorBookSearch}>
+                  <label>Guest name<input value={bookGuestName} onChange={event => setBookGuestName(event.target.value)} aria-label="Operator guest name" /></label>
+                  <label>Mobile<input value={bookMobile} onChange={event => setBookMobile(event.target.value)} aria-label="Operator guest mobile" /></label>
+                  <div className="operator-book-inline">
+                    <label>Date<input type="date" value={bookDate} onChange={event => setBookDate(event.target.value)} aria-label="Operator booking date" /></label>
+                    <label>Time<input type="time" value={bookTime} onChange={event => setBookTime(event.target.value)} aria-label="Operator booking time" /></label>
+                  </div>
+                  <div className="operator-book-inline">
+                    <label>Party<select value={bookPartySize} onChange={event => setBookPartySize(Number(event.target.value))} aria-label="Operator booking party size">{[1, 2, 3, 4, 5, 6, 7, 8].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
+                    <label>Area<select value={bookSection} onChange={event => setBookSection(event.target.value as SeatingSection | 'either')} aria-label="Operator booking seating"><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option><option value="either">Either</option></select></label>
+                  </div>
+                  <label>Note<textarea value={bookNote} onChange={event => setBookNote(event.target.value)} maxLength={160} aria-label="Operator booking note" /></label>
+                  <button type="submit" disabled={busy || bookBusy}>{bookBusy ? 'Searching...' : 'Check availability'}</button>
+                </form>
+                <p className="operator-book-status" role="status">{bookStatus}</p>
+                <div className="operator-book-results" aria-label="Operator booking availability">
+                  {bookSlots.map(slot => (
+                    <article key={slot.slotId}>
+                      <span>{slot.displayTime}</span>
+                      <strong>{slot.exact ? 'Exact match' : 'Nearby time'}</strong>
+                      {slot.seating.map(choice => (
+                        <button type="button" key={`${slot.slotId}-${choice.section}`} disabled={busy || bookBusy} onClick={() => bookOperatorSlot(slot, choice.section)} aria-label={`Book ${choice.label} at ${slot.displayTime}`}>Book {choice.label}</button>
+                      ))}
+                    </article>
+                  ))}
+                </div>
               </div>
+              ) : (
               <div className="operator-list">
                 <div className="section-heading">
                   <div>
@@ -745,6 +884,7 @@ function OperatorPage() {
                   </article>
                 ))}
               </div>
+              )}
             </aside>
             <section className="resyos-floor-stage" aria-label="Floor plan timeline">
               <div className="timeline-head" aria-label="Service timeline">
@@ -811,7 +951,7 @@ function OperatorPage() {
                       <button type="button" key={booking.reference} className={`timeline-party ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`} onClick={() => setSelectedReference(booking.reference)}>
                         <span>{formatLocalTime(booking.startsAt)}</span>
                         <strong>{booking.guestLabel || 'Demo Guest'}</strong>
-                        <em>{booking.partySize} · table {booking.tableCode || 'pending'} · {statusLabel(booking.status)}</em>
+                        <em>{booking.reference} · {booking.partySize} · table {booking.tableCode || 'pending'} · {statusLabel(booking.status)}</em>
                       </button>
                     ))}
                   </section>
@@ -828,6 +968,7 @@ function OperatorPage() {
                           <span>{slot.slot}</span>
                           <strong>{slot.remaining}</strong>
                           <small>{slot.covers}/10 covers</small>
+                          <button type="button" disabled={slot.remaining === 0} onClick={() => seedOperatorBook(slot.time)}>Book this time</button>
                         </article>
                       ))}
                     </div>
@@ -863,7 +1004,7 @@ function OperatorPage() {
               )}
               <section aria-labelledby="holds-title">
                 <h2 id="holds-title">Recent holds</h2>
-                {holds.length === 0 ? <p>No open demo holds.</p> : holds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
+                {openHolds.length === 0 ? <p>No open demo holds.</p> : openHolds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
               </section>
               <section aria-labelledby="notifications-title">
                 <h2 id="notifications-title">Disabled notification adapter</h2>
@@ -878,6 +1019,12 @@ function OperatorPage() {
   );
 }
 
+
+function normalizeDemoMobile(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length >= 10) return digits;
+  return '2095550100';
+}
 
 function OperatorIcon({ name }: { name: string }) {
   const shared = { width: 23, height: 23, viewBox: '0 0 24 24', fill: 'none', xmlns: 'http://www.w3.org/2000/svg', focusable: false };

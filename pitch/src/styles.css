@@ -1106,6 +1106,128 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .queue-tabs span,
 .queue-tabs strong { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 
+
+.operator-book-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  color: var(--operator-text);
+}
+
+.operator-book-form {
+  display: grid;
+  gap: 9px;
+}
+
+.operator-book-form label {
+  display: grid;
+  gap: 5px;
+  color: #aeb9c3;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.operator-book-form input,
+.operator-book-form select,
+.operator-book-form textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #3e4c58;
+  border-radius: 8px;
+  background: #18232c;
+  color: #f8fbff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  padding: 0 10px;
+  outline: none;
+}
+
+.operator-book-form textarea {
+  min-height: 62px;
+  padding-top: 9px;
+  resize: none;
+}
+
+.operator-book-form input:focus,
+.operator-book-form select:focus,
+.operator-book-form textarea:focus {
+  border-color: #45b8e8;
+  box-shadow: 0 0 0 3px rgba(69, 184, 232, .18);
+}
+
+.operator-book-form button,
+.operator-book-results button,
+.availability-grid button {
+  min-height: 38px;
+  border: 1px solid #596775;
+  border-radius: 8px;
+  background: #eef2f5;
+  color: #101820;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.operator-book-form button:disabled,
+.operator-book-results button:disabled,
+.availability-grid button:disabled {
+  opacity: .5;
+}
+
+.operator-book-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.operator-book-status {
+  margin: 0;
+  min-height: 34px;
+  padding: 9px 10px;
+  border: 1px solid #33404b;
+  border-radius: 8px;
+  background: #121a21;
+  color: #d7e0e8;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.operator-book-results {
+  display: grid;
+  gap: 8px;
+  max-height: 230px;
+  overflow: auto;
+}
+
+.operator-book-results article {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #34414c;
+  border-radius: 9px;
+  background: #26313b;
+}
+
+.operator-book-results span,
+.operator-book-results strong {
+  display: block;
+}
+
+.operator-book-results span {
+  color: #f8fbff;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.operator-book-results strong {
+  color: #9da8b2;
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
 .operator-list,
 .floor-panel {
   background: transparent;
