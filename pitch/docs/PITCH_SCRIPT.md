@@ -30,7 +30,7 @@ Cancel the booking. The booking status changes to cancelled and the table capaci
 
 Open `/operator`. Enter the operator passcode from the trusted local environment or Cloudflare Pages secret. The operator view is designed for iPad use during service.
 
-Show the reservations list, status actions, floor snapshot, recent holds, and disabled notification adapter. Staff can check in, seat, finish, or cancel a demo reservation. The same Supabase-backed data is shared between the guest flow and operator view.
+Show the reservations list, status actions, floor snapshot, recent holds, and disabled notification adapter. Staff can check in, seat, finish, cancel, or mark a demo reservation as no-show. The same Supabase-backed data is shared between the guest flow and operator view.
 
 Use the reset button when the demo needs to return to a clean state.
 

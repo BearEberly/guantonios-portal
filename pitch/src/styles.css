@@ -1681,10 +1681,12 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 
 .operator-row.confirmed { box-shadow: inset 4px 0 0 #f3f6f8; }
 .operator-row.cancelled { box-shadow: inset 4px 0 0 #cf4b48; opacity: .72; }
+.operator-row.no_show { box-shadow: inset 4px 0 0 #9b4ec9; opacity: .72; }
 .operator-row.completed { box-shadow: inset 4px 0 0 #6d7780; opacity: .76; }
 .operator-row.checked_in { box-shadow: inset 4px 0 0 #36aeea; }
 .operator-row.seated { box-shadow: inset 4px 0 0 #ff9f36; }
 .operator-row.cancelled .status-pill { background: #8c2929; color: white !important; }
+.operator-row.no_show .status-pill { background: #6d2f91; color: white !important; }
 .operator-row.completed .status-pill { background: #4b5563; color: white !important; }
 .operator-row.checked_in .status-pill { background: #1f8ed1; color: white !important; }
 .operator-row.seated .status-pill { background: #d87921; color: #1d1208 !important; }
@@ -1692,7 +1694,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .operator-actions {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -2042,6 +2044,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .floor-table.seated { background: #ff9536; color: #1c0f06; }
 .floor-table.completed { background: #55b36c; color: #061508; }
 .floor-table.cancelled { background: #66343a; color: #f6d5d8; }
+.floor-table.no_show { background: #3f2b55; color: #ead8ff; }
 .floor-table.blocked { background: #192129; color: #b7c1ca; border-style: dashed; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .25), 0 0 0 3px rgba(207, 75, 72, .18); }
 .floor-table.blockable { background: #271d21; color: #ffd9d9; border-color: #cf4b48; border-style: dashed; box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .25), 0 0 0 4px rgba(207, 75, 72, .2); }
 .floor-table.assignable {
@@ -2124,6 +2127,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .guest-popover.checked_in { background: #e5f7ff; }
 .guest-popover.seated { background: #ffe0c2; }
 .guest-popover.cancelled { background: #ffe1e1; }
+.guest-popover.no_show { background: #f3e8ff; }
 
 
 .floor-legend .legend-blocked {
@@ -2976,9 +2980,21 @@ button.timeline-cell:hover,
   box-shadow: inset 4px 0 0 #cf4b48, 0 8px 18px rgba(0,0,0,.24);
 }
 
+.timeline-reservation-card.no_show {
+  background: #37284a;
+  color: #ead8ff;
+  opacity: .76;
+  box-shadow: inset 4px 0 0 #9b4ec9, 0 8px 18px rgba(0,0,0,.24);
+}
+
 .timeline-reservation-card.cancelled span,
 .timeline-reservation-card.cancelled em {
   color: #f1bcc1;
+}
+
+.timeline-reservation-card.no_show span,
+.timeline-reservation-card.no_show em {
+  color: #ddc6ff;
 }
 
 .timeline-covers-row {
@@ -3042,6 +3058,7 @@ button.timeline-cell:hover,
 .timeline-party.seated { border-left-color: #ff9536; }
 .timeline-party.completed { border-left-color: #55b36c; }
 .timeline-party.cancelled { border-left-color: #cf4b48; opacity: .72; }
+.timeline-party.no_show { border-left-color: #9b4ec9; opacity: .72; }
 .timeline-party span { color: #dce5ee; font-size: 20px; font-weight: 950; }
 .timeline-party strong { font-size: 17px; }
 .timeline-party em { color: #aeb9c3; font-size: 12px; font-style: normal; font-weight: 850; }
@@ -3433,6 +3450,7 @@ button.timeline-cell:hover,
 .selected-activity-row.activity-attention i::after,
 .selected-activity-row.activity-cancelled i::after,
 .selected-activity-row.activity-late i::after { background: #cf4b48; }
+.selected-activity-row.activity-no_show i::after { background: #9b4ec9; }
 .selected-activity-row.activity-saving i::after,
 .selected-activity-row.activity-idle i::after { background: #9b7af4; }
 
@@ -4456,6 +4474,14 @@ button.timeline-cell:hover,
 .profile-chip-row span.arrival-early {
   background: #e7eef5;
   color: #263746;
+}
+
+.operator-tags span.arrival-no_show,
+.profile-chip-row span.arrival-no_show,
+.service-stage-report article.arrival-no_show {
+  border-color: rgba(207, 75, 72, .5);
+  background: #ffe1e1;
+  color: #6d1515;
 }
 
 .operator-row.arrival-late {

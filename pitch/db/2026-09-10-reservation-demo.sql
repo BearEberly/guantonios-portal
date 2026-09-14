@@ -96,7 +96,7 @@ create table if not exists reservation_demo.bookings (
   start_time time not null,
   guest_label text not null default 'Demo Guest',
   contact_placeholder text not null default 'demo@example.invalid',
-  status text not null default 'confirmed' check (status in ('confirmed','checked_in','seated','completed','cancelled')),
+  status text not null default 'confirmed' check (status in ('confirmed','checked_in','seated','completed','cancelled','no_show')),
   demo_disclaimer text not null default 'Synthetic demo reservation only. No real table, email, or text is created.',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -110,7 +110,7 @@ create table if not exists reservation_demo.allocations (
   booking_id uuid references reservation_demo.bookings(id) on delete cascade,
   starts_at timestamptz not null,
   ends_at timestamptz not null,
-  status text not null check (status in ('held','confirmed','checked_in','seated','completed','released','expired','cancelled')),
+  status text not null check (status in ('held','confirmed','checked_in','seated','completed','released','expired','cancelled','no_show')),
   created_at timestamptz not null default now(),
   check (ends_at > starts_at),
   check ((hold_id is not null)::integer + (booking_id is not null)::integer = 1)
@@ -637,12 +637,12 @@ begin
     select * into v_booking from reservation_demo.bookings b
     where b.reference = payload->>'reference'
       and (b.management_token_hash = reservation_demo.hash_secret(payload->>'manageToken') or v_operator)
-      and b.status <> 'cancelled';
+      and b.status not in ('cancelled','no_show');
     if not found then
       return jsonb_build_object('ok', false, 'error', 'not_found_or_unauthorized');
     end if;
     update reservation_demo.bookings set status = 'cancelled', updated_at = now() where id = v_booking.id returning * into v_booking;
-    update reservation_demo.allocations set status = 'cancelled' where booking_id = v_booking.id;
+    update reservation_demo.allocations set status = 'released' where booking_id = v_booking.id;
     insert into reservation_demo.audit_events (actor, action, booking_id, detail)
     values (case when v_operator then 'operator-demo' else 'guest-demo' end, 'booking_cancelled', v_booking.id, '{}'::jsonb);
     return jsonb_build_object('ok', true, 'reservation', jsonb_build_object('reference', v_booking.reference, 'status', v_booking.status, 'partySize', v_booking.party_size, 'section', v_booking.section, 'startsAt', v_booking.starts_at, 'endsAt', v_booking.ends_at), 'demo', true);
@@ -684,7 +684,7 @@ begin
     v_reference := payload->>'reference';
     v_status := payload->>'status';
     v_table_code := nullif(payload->>'tableCode', '');
-    if v_status not in ('confirmed','checked_in','seated','completed','cancelled') then
+    if v_status not in ('confirmed','checked_in','seated','completed','cancelled','no_show') then
       return jsonb_build_object('ok', false, 'error', 'invalid_status');
     end if;
     select * into v_booking from reservation_demo.bookings where reference = v_reference;
@@ -709,7 +709,7 @@ begin
       begin
         update reservation_demo.allocations
         set table_id = v_target_table.id,
-            status = case when v_status = 'cancelled' then 'cancelled' when v_status = 'completed' then 'completed' else v_status end
+            status = v_status
         where booking_id = v_booking.id;
 
         update reservation_demo.bookings
@@ -723,7 +723,7 @@ begin
       end;
     else
       update reservation_demo.bookings set status = v_status, updated_at = now() where id = v_booking.id returning * into v_booking;
-      update reservation_demo.allocations set status = case when v_status = 'cancelled' then 'cancelled' when v_status = 'completed' then 'completed' else v_status end where booking_id = v_booking.id;
+      update reservation_demo.allocations set status = case when v_status in ('cancelled','completed','no_show') then 'released' else v_status end where booking_id = v_booking.id;
     end if;
 
     insert into reservation_demo.audit_events (actor, action, booking_id, detail)
@@ -738,13 +738,13 @@ begin
   end if;
 
   if v_op = 'reset' and v_operator then
-    delete from reservation_demo.notification_events;
-    delete from reservation_demo.audit_events;
-    delete from reservation_demo.allocations;
-    delete from reservation_demo.booking_attempts;
-    delete from reservation_demo.bookings;
-    delete from reservation_demo.holds;
-    delete from reservation_demo.service_days;
+    delete from reservation_demo.notification_events where true;
+    delete from reservation_demo.audit_events where true;
+    delete from reservation_demo.allocations where true;
+    delete from reservation_demo.booking_attempts where true;
+    delete from reservation_demo.bookings where true;
+    delete from reservation_demo.holds where true;
+    delete from reservation_demo.service_days where true;
     perform reservation_demo.ensure_seed();
     insert into reservation_demo.audit_events (actor, action, detail) values ('operator-demo', 'demo_reset', '{}'::jsonb);
     return jsonb_build_object('ok', true, 'reset', true, 'demo', true);
@@ -777,15 +777,17 @@ begin
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
 
-  v_stage := 'truncate_demo_rows';
-  truncate table
-    reservation_demo.notification_events,
-    reservation_demo.audit_events,
-    reservation_demo.allocations,
-    reservation_demo.booking_attempts,
-    reservation_demo.bookings,
-    reservation_demo.holds,
-    reservation_demo.service_days;
+  v_stage := 'reset_lock';
+  perform pg_advisory_xact_lock(hashtext('reservation_demo_reset'));
+
+  v_stage := 'delete_demo_rows';
+  delete from reservation_demo.notification_events where true;
+  delete from reservation_demo.audit_events where true;
+  delete from reservation_demo.allocations where true;
+  delete from reservation_demo.booking_attempts where true;
+  delete from reservation_demo.bookings where true;
+  delete from reservation_demo.holds where true;
+  delete from reservation_demo.service_days where true;
 
   v_stage := 'seed';
   perform reservation_demo.ensure_seed();

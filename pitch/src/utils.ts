@@ -46,5 +46,6 @@ export function nextBookableDate() {
 }
 
 export function statusLabel(status: string) {
+  if (status === 'no_show') return 'No-show';
   return status.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
 }

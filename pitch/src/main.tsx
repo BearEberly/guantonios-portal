@@ -480,9 +480,9 @@ function ManagePage() {
               <label>Time<select value={time} onChange={e => setTime(e.target.value)}>{['17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30'].map(t => <option key={t}>{t}</option>)}</select></label>
               <label>Guests<select value={partySize} onChange={e => setPartySize(Number(e.target.value))}>{Array.from({ length: 8 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select></label>
               <label>Seating<select value={section} onChange={e => setSection(e.target.value as SeatingSection)}><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></label>
-              <button type="submit" disabled={busy || reservation.status === 'cancelled'}>Change demo reservation</button>
+              <button type="submit" disabled={busy || ['cancelled','no_show','completed'].includes(reservation.status)}>Change demo reservation</button>
             </form>
-            <button className="danger" type="button" onClick={cancel} disabled={busy || reservation.status === 'cancelled'}>Cancel demo reservation</button>
+            <button className="danger" type="button" onClick={cancel} disabled={busy || ['cancelled','no_show','completed'].includes(reservation.status)}>Cancel demo reservation</button>
           </article>
         )}
       </section>
@@ -492,7 +492,7 @@ function ManagePage() {
 
 type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Texts' | 'Reports';
 type OperatorMode = 'floor' | 'timeline' | 'availability' | 'reports';
-type ConfirmableBookingStatus = 'completed' | 'cancelled';
+type ConfirmableBookingStatus = 'completed' | 'cancelled' | 'no_show';
 type PendingBookingAction = {
   reference: string;
   nextStatus: ConfirmableBookingStatus;
@@ -502,6 +502,31 @@ type PendingBookingAction = {
   section: SeatingSection;
   tableLabel: string;
 };
+
+const CLOSED_BOOKING_STATUSES = ['cancelled', 'no_show', 'completed'];
+
+function bookingActionTitle(status: ConfirmableBookingStatus) {
+  if (status === 'cancelled') return 'Cancel this reservation?';
+  if (status === 'no_show') return 'Mark this party no-show?';
+  return 'Finish and close this table?';
+}
+
+function bookingActionCopy(status: ConfirmableBookingStatus) {
+  if (status === 'cancelled') return 'Moves this party out of live service as a cancellation and keeps the cancellation visible in reports. No fee, refund, or SMS is sent in the demo.';
+  if (status === 'no_show') return 'Marks the party as a no-show, releases its table capacity, and keeps it separate from ordinary cancellations in the queue and reports. No fee, refund, or SMS is sent in the demo.';
+  return 'Marks service complete and moves the party to Done. Use this after the table is paid and ready to turn.';
+}
+
+function bookingActionConfirmLabel(status: ConfirmableBookingStatus) {
+  if (status === 'cancelled') return 'Confirm cancel';
+  if (status === 'no_show') return 'Confirm no-show';
+  return 'Confirm finish';
+}
+
+function isDestructiveBookingAction(status: ConfirmableBookingStatus) {
+  return status === 'cancelled' || status === 'no_show';
+}
+
 type AvailabilityMatrixRow = {
   slot: string;
   time: string;
@@ -568,7 +593,7 @@ function turnRiskLabel(risk?: string | null) {
   return 'Not seated';
 }
 
-type ArrivalStateKey = 'early' | 'due' | 'late' | 'arrived' | 'seated' | 'done' | 'cancelled';
+type ArrivalStateKey = 'early' | 'due' | 'late' | 'arrived' | 'seated' | 'done' | 'cancelled' | 'no_show';
 
 type ArrivalState = { key: ArrivalStateKey; label: string; detail: string };
 
@@ -591,6 +616,7 @@ function formatSyncTime(value: number | null) {
 
 function arrivalStateForBooking(booking?: ReservationSummary | null, nowMs = Date.now()): ArrivalState {
   if (!booking) return { key: 'due', label: 'Due', detail: 'No party selected' };
+  if (booking.status === 'no_show') return { key: 'no_show', label: 'No-show', detail: 'Did not arrive for this service' };
   if (booking.status === 'cancelled') return { key: 'cancelled', label: 'Cancelled', detail: 'Inactive party' };
   if (booking.status === 'completed') return { key: 'done', label: 'Done', detail: 'Finished for this service' };
   if (booking.status === 'seated') return { key: 'seated', label: 'Seated', detail: `${serviceStageShortLabel(booking.serviceStage)} · ${turnRiskLabel(turnRiskForBooking(booking))}` };
@@ -819,7 +845,8 @@ function OperatorPage() {
       selectReservation(reference);
       if (nextStatus === 'seated') setQueueFilter('Seated');
       if (nextStatus === 'completed') setQueueFilter('Done');
-      if (nextStatus === 'cancelled') setQueueFilter('No-show');
+      if (nextStatus === 'cancelled') setQueueFilter('Cancelled');
+      if (nextStatus === 'no_show') setQueueFilter('No-show');
       await load(
         undefined,
         tableCode ? `Seated ${reference} at table ${tableCode}.` : `Updated ${reference} to ${statusLabel(nextStatus)}.`,
@@ -1217,13 +1244,14 @@ function OperatorPage() {
       : syncMessage;
   const syncRecordSummary = `${bookings.length} bookings · ${waitlist.length} waitlist · ${notifyRequests.length} notify`;
   const selectedServiceLabel = serviceDateLabel(selectedServiceDate);
-  const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
+  const activeBookings = bookings.filter(booking => !CLOSED_BOOKING_STATUSES.includes(booking.status));
   const activeCount = activeBookings.reduce((total, booking) => total + booking.partySize, 0);
   const bookedCount = bookings.filter(booking => booking.status === 'confirmed').length;
   const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
   const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
   const completedCount = bookings.filter(booking => booking.status === 'completed').length;
   const cancelledCount = bookings.filter(booking => booking.status === 'cancelled').length;
+  const noShowCount = bookings.filter(booking => booking.status === 'no_show').length;
   const previewCount = notifications.length;
   const openWaitlist = waitlist.filter(entry => ['waiting', 'notified'].includes(entry.status));
   const activeNotifyRequests = notifyRequests.filter(entry => ['active', 'notified'].includes(entry.status));
@@ -1339,13 +1367,16 @@ function OperatorPage() {
             : { label: 'Next: finish table', detail: `${turnRiskLabel(selectedTurnRisk)}. Payment is complete and the table can be closed.` }
           : selectedBooking.status === 'completed'
             ? { label: 'Turn complete', detail: 'Table is closed out for this synthetic service.' }
-            : { label: 'No active action', detail: 'This party is cancelled or inactive.' }
+            : selectedBooking.status === 'no_show'
+              ? { label: 'No-show', detail: 'This party was marked no-show and removed from live service.' }
+              : { label: 'No active action', detail: 'This party is cancelled or inactive.' }
   ) : null;
-  const selectedLifecycleClosed = selectedBooking ? ['cancelled', 'completed'].includes(selectedBooking.status) : true;
+  const selectedLifecycleClosed = selectedBooking ? CLOSED_BOOKING_STATUSES.includes(selectedBooking.status) : true;
   const selectedCanCheckIn = Boolean(selectedBooking && selectedBooking.status === 'confirmed');
   const selectedCanSeatFromFloor = Boolean(selectedBooking && ['confirmed', 'checked_in'].includes(selectedBooking.status));
   const selectedCanFinish = Boolean(selectedBooking && ['checked_in', 'seated'].includes(selectedBooking.status));
   const selectedCanCancel = Boolean(selectedBooking && !selectedLifecycleClosed);
+  const selectedCanNoShow = Boolean(selectedBooking && ['confirmed', 'checked_in'].includes(selectedBooking.status));
   const selectedCommandState = selectedBooking ? (
     selectedBooking.status === 'confirmed'
       ? { label: 'Arrival', value: selectedArrivalState.label }
@@ -1417,11 +1448,12 @@ function OperatorPage() {
     if (queueFilter === 'Late') return arrivalState.key === 'late';
     if (queueFilter === 'Due now') return arrivalState.key === 'due';
     if (queueFilter === 'Here') return arrivalState.key === 'arrived';
-    if (queueFilter === 'Unseated') return !['seated', 'completed', 'cancelled'].includes(booking.status);
+    if (queueFilter === 'Unseated') return !['seated', ...CLOSED_BOOKING_STATUSES].includes(booking.status);
     if (queueFilter === 'Booked') return booking.status === 'confirmed';
     if (queueFilter === 'Seated') return booking.status === 'seated';
     if (queueFilter === 'Done') return booking.status === 'completed';
-    if (queueFilter === 'No-show') return booking.status === 'cancelled';
+    if (queueFilter === 'Cancelled') return booking.status === 'cancelled';
+    if (queueFilter === 'No-show') return booking.status === 'no_show';
     return true;
   };
   const partyMatches = (booking: ReservationSummary) => {
@@ -1436,7 +1468,7 @@ function OperatorPage() {
       .some(value => value.toLowerCase().includes(query));
   };
   const visibleBookings = bookings.filter(booking => queueMatches(booking) && partyMatches(booking) && searchMatches(booking));
-  const visibleActiveCovers = visibleBookings.filter(booking => !['cancelled', 'completed'].includes(booking.status)).reduce((total, booking) => total + booking.partySize, 0);
+  const visibleActiveCovers = visibleBookings.filter(booking => !CLOSED_BOOKING_STATUSES.includes(booking.status)).reduce((total, booking) => total + booking.partySize, 0);
   const openHolds = holds.filter(hold => !['confirmed', 'cancelled', 'expired'].includes(hold.status));
   const waitlistMatches = (entry: WaitlistEntry) => {
     const query = queueSearch.trim().toLowerCase();
@@ -1494,7 +1526,7 @@ function OperatorPage() {
     { label: 'Late', stateKey: 'late', count: activeBookings.filter(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'late').length, detail: 'Need attention' },
     { label: 'Due now', stateKey: 'due', count: activeBookings.filter(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'due').length, detail: 'At this slot' },
     { label: 'Here', stateKey: 'arrived', count: activeBookings.filter(booking => arrivalStateForBooking(booking, operatorNowMs).key === 'arrived').length, detail: 'Checked in' },
-    { label: 'Unseated', stateKey: 'unseated', count: activeBookings.filter(booking => !['seated', 'completed', 'cancelled'].includes(booking.status)).length, detail: 'Seat next' }
+    { label: 'Unseated', stateKey: 'unseated', count: activeBookings.filter(booking => !['seated', ...CLOSED_BOOKING_STATUSES].includes(booking.status)).length, detail: 'Seat next' }
   ];
   const railGroups = [
     { label: 'All', count: bookings.length },
@@ -1503,7 +1535,8 @@ function OperatorPage() {
     { label: 'Booked', count: bookedCount },
     { label: 'Seated', count: seatedCount },
     { label: 'Done', count: completedCount },
-    { label: 'No-show', count: cancelledCount }
+    { label: 'Cancelled', count: cancelledCount },
+    { label: 'No-show', count: noShowCount }
   ];
   const defaultPacingLimit = 10;
   const pacingRulesBySlot = new Map(pacingRules.map(rule => [rule.slotTime, rule]));
@@ -1530,20 +1563,23 @@ function OperatorPage() {
                 ? 'Texts Rail'
                 : 'Floor Plan';
   const timelineGridTemplate = `96px repeat(${timeSlots.length}, minmax(76px, 1fr))`;
-  const nonCancelledBookings = bookings.filter(booking => booking.status !== 'cancelled');
-  const reportCovers = nonCancelledBookings.reduce((total, booking) => total + booking.partySize, 0);
+  const serviceCountedBookings = bookings.filter(booking => !['cancelled', 'no_show'].includes(booking.status));
+  const reportCovers = serviceCountedBookings.reduce((total, booking) => total + booking.partySize, 0);
   const completedCovers = bookings.filter(booking => booking.status === 'completed').reduce((total, booking) => total + booking.partySize, 0);
   const cancelledCovers = bookings.filter(booking => booking.status === 'cancelled').reduce((total, booking) => total + booking.partySize, 0);
-  const averagePartySize = nonCancelledBookings.length ? (reportCovers / nonCancelledBookings.length).toFixed(1) : '0.0';
+  const noShowCovers = bookings.filter(booking => booking.status === 'no_show').reduce((total, booking) => total + booking.partySize, 0);
+  const lostCovers = cancelledCovers + noShowCovers;
+  const averagePartySize = serviceCountedBookings.length ? (reportCovers / serviceCountedBookings.length).toFixed(1) : '0.0';
   const statusCoverReport = [
     { label: 'Booked', parties: bookings.filter(booking => booking.status === 'confirmed').length, covers: bookings.filter(booking => booking.status === 'confirmed').reduce((total, booking) => total + booking.partySize, 0) },
     { label: 'Checked in', parties: bookings.filter(booking => booking.status === 'checked_in').length, covers: bookings.filter(booking => booking.status === 'checked_in').reduce((total, booking) => total + booking.partySize, 0) },
     { label: 'Seated', parties: bookings.filter(booking => booking.status === 'seated').length, covers: bookings.filter(booking => booking.status === 'seated').reduce((total, booking) => total + booking.partySize, 0) },
     { label: 'Finished', parties: bookings.filter(booking => booking.status === 'completed').length, covers: completedCovers },
-    { label: 'Cancelled', parties: bookings.filter(booking => booking.status === 'cancelled').length, covers: cancelledCovers }
+    { label: 'Cancelled', parties: cancelledCount, covers: cancelledCovers },
+    { label: 'No-show', parties: noShowCount, covers: noShowCovers }
   ];
   const sectionCoverReport = (['indoor', 'outdoor'] as SeatingSection[]).map(section => {
-    const sectionBookings = nonCancelledBookings.filter(booking => booking.section === section);
+    const sectionBookings = serviceCountedBookings.filter(booking => booking.section === section);
     return {
       section,
       label: section === 'indoor' ? 'Dining room' : 'Patio',
@@ -1651,7 +1687,7 @@ function OperatorPage() {
   }));
   const timelineCoversBySlot = timeSlotKeys.map((slotTime, index) => {
     const covers = timelineBookings
-      .filter(booking => !['cancelled', 'completed'].includes(booking.status))
+      .filter(booking => !CLOSED_BOOKING_STATUSES.includes(booking.status))
       .filter(booking => localTimeKeyFromTimestamp(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
     return { slot: timeSlots[index], covers };
@@ -1659,7 +1695,7 @@ function OperatorPage() {
   const capacityBySlot = timeSlots.map((slot, index) => {
     const slotTime = timeSlotKeys[index];
     const covers = bookings
-      .filter(booking => !['cancelled', 'completed'].includes(booking.status))
+      .filter(booking => !CLOSED_BOOKING_STATUSES.includes(booking.status))
       .filter(booking => localTimeKeyFromTimestamp(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
     const rule = pacingRulesBySlot.get(slotTime) || null;
@@ -1906,7 +1942,7 @@ function OperatorPage() {
   const moveCandidate = movingBooking || explicitSelectedBooking;
   const waitlistSeatCandidate = selectedWaitlistEntry && ['waiting', 'notified'].includes(selectedWaitlistEntry.status) ? selectedWaitlistEntry : null;
   const activeSeatCandidate = moveCandidate || waitlistSeatCandidate;
-  const canMoveBooking = (booking?: ReservationSummary | null) => Boolean(booking && !['cancelled', 'completed'].includes(booking.status));
+  const canMoveBooking = (booking?: ReservationSummary | null) => Boolean(booking && !CLOSED_BOOKING_STATUSES.includes(booking.status));
   const canSeatBookingAtTable = (booking: ReservationSummary | null | undefined, table: (typeof floorTables)[number]) => Boolean(booking && canMoveBooking(booking) && booking.partySize <= table.seats);
   const canSeatWaitlistAtTable = (entry: WaitlistEntry | null | undefined, table: (typeof floorTables)[number]) => Boolean(entry && ['waiting', 'notified'].includes(entry.status) && entry.partySize <= table.seats && (!entry.section || entry.section === (table.section === 'Patio' ? 'outdoor' : 'indoor')));
   const canSeatAtTable = (table: (typeof floorTables)[number]) => moveCandidate ? canSeatBookingAtTable(moveCandidate, table) : canSeatWaitlistAtTable(waitlistSeatCandidate, table);
@@ -2635,7 +2671,7 @@ function OperatorPage() {
                 <article className="report-mini-card primary">
                   <span>Total covers</span>
                   <strong>{reportCovers}</strong>
-                  <small>{nonCancelledBookings.length} parties · avg {averagePartySize}</small>
+                  <small>{serviceCountedBookings.length} parties · avg {averagePartySize}</small>
                 </article>
                 <article className="report-mini-card">
                   <span>Pacing alert</span>
@@ -2798,10 +2834,11 @@ function OperatorPage() {
                     </div>
                     <span className="status-pill">{statusLabel(booking.status)}</span>
                     <div className="operator-actions">
-                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'checked_in')}>Check in</button>
-                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'seated')}>Seat</button>
-                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'completed')}>Finish</button>
-                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'cancelled')}>Cancel</button>
+                      <button disabled={busy || booking.status !== 'confirmed'} onClick={() => setBookingStatus(booking.reference, 'checked_in')}>Check in</button>
+                      <button disabled={busy || !['confirmed', 'checked_in'].includes(booking.status)} onClick={() => setBookingStatus(booking.reference, 'seated')}>Seat</button>
+                      <button disabled={busy || !['checked_in', 'seated'].includes(booking.status)} onClick={() => requestBookingActionConfirmation(booking, 'completed')}>Finish</button>
+                      <button disabled={busy || CLOSED_BOOKING_STATUSES.includes(booking.status)} onClick={() => requestBookingActionConfirmation(booking, 'cancelled')}>Cancel</button>
+                      <button disabled={busy || !['confirmed', 'checked_in'].includes(booking.status)} onClick={() => requestBookingActionConfirmation(booking, 'no_show')}>No-show</button>
                     </div>
                   </article>
                 ))}
@@ -3053,7 +3090,7 @@ function OperatorPage() {
                       <article>
                         <span>Total covers</span>
                         <strong>{reportCovers}</strong>
-                        <small>{nonCancelledBookings.length} booked parties</small>
+                        <small>{serviceCountedBookings.length} booked parties</small>
                       </article>
                       <article>
                         <span>Active covers</span>
@@ -3063,7 +3100,7 @@ function OperatorPage() {
                       <article>
                         <span>Avg party</span>
                         <strong>{averagePartySize}</strong>
-                        <small>{cancelledCovers} cancelled covers</small>
+                        <small>{lostCovers} cancelled/no-show covers</small>
                       </article>
                       <article>
                         <span>Utilization</span>
@@ -3269,13 +3306,14 @@ function OperatorPage() {
                       <button type="button" disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move'}</button>
                       <button type="button" disabled={busy || !selectedCanFinish} onClick={() => requestBookingActionConfirmation(selectedBooking, 'completed')}>Finish</button>
                       <button type="button" className="danger" disabled={busy || !selectedCanCancel} onClick={() => requestBookingActionConfirmation(selectedBooking, 'cancelled')}>Cancel</button>
+                      <button type="button" className="danger" disabled={busy || !selectedCanNoShow} onClick={() => requestBookingActionConfirmation(selectedBooking, 'no_show')}>No-show</button>
                       <button type="button" disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Profile</button>
                     </div>
                     {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
                   </section>
                   {pendingBookingAction?.reference === selectedBooking.reference && (
                     <section
-                      className={`operator-confirmation-sheet ${pendingBookingAction.nextStatus === 'cancelled' ? 'danger' : ''}`}
+                      className={`operator-confirmation-sheet ${isDestructiveBookingAction(pendingBookingAction.nextStatus) ? 'danger' : ''}`}
                       role="dialog"
                       aria-modal="false"
                       aria-labelledby="operator-action-confirm-title"
@@ -3283,20 +3321,20 @@ function OperatorPage() {
                     >
                       <div>
                         <span>Confirm operator action</span>
-                        <strong id="operator-action-confirm-title">{pendingBookingAction.nextStatus === 'cancelled' ? 'Cancel this reservation?' : 'Finish and close this table?'}</strong>
+                        <strong id="operator-action-confirm-title">{bookingActionTitle(pendingBookingAction.nextStatus)}</strong>
                         <p id="operator-action-confirm-copy">
                           {pendingBookingAction.reference} · {pendingBookingAction.guestLabel} · {pendingBookingAction.partySize} guests · {formatLocalTime(pendingBookingAction.startsAt)} · {pendingBookingAction.section} · table {pendingBookingAction.tableLabel}
                         </p>
                       </div>
-                      <p>{pendingBookingAction.nextStatus === 'cancelled' ? 'Moves this party out of live service and keeps the cancellation visible in reports. No fee, refund, or SMS is sent in the demo.' : 'Marks service complete and moves the party to Done. Use this after the table is paid and ready to turn.'}</p>
+                      <p>{bookingActionCopy(pendingBookingAction.nextStatus)}</p>
                       <div className="operator-confirmation-actions">
                         <button type="button" onClick={() => setPendingBookingAction(null)} disabled={busy}>Keep reservation</button>
                         <button
                           type="button"
-                          className={pendingBookingAction.nextStatus === 'cancelled' ? 'danger' : ''}
+                          className={isDestructiveBookingAction(pendingBookingAction.nextStatus) ? 'danger' : ''}
                           onClick={confirmPendingBookingAction}
                           disabled={busy}
-                        >{pendingBookingAction.nextStatus === 'cancelled' ? 'Confirm cancel' : 'Confirm finish'}</button>
+                        >{bookingActionConfirmLabel(pendingBookingAction.nextStatus)}</button>
                       </div>
                     </section>
                   )}
@@ -3328,8 +3366,8 @@ function OperatorPage() {
                     </div>
                     <label>Mobile<input value={detailContact} onChange={event => setDetailContact(event.target.value)} maxLength={96} aria-label="Reservation edit contact" /></label>
                     <label>Host note<textarea value={detailNote} onChange={event => setDetailNote(event.target.value)} maxLength={400} aria-label="Reservation edit note" /></label>
-                    <button type="submit" disabled={busy || detailBusy || ['cancelled', 'completed'].includes(selectedBooking.status)}>{detailBusy ? 'Saving...' : 'Save details'}</button>
-                    {['cancelled', 'completed'].includes(selectedBooking.status) && <p className="move-hint">Only active reservations can be edited from the iPad drawer.</p>}
+                    <button type="submit" disabled={busy || detailBusy || CLOSED_BOOKING_STATUSES.includes(selectedBooking.status)}>{detailBusy ? 'Saving...' : 'Save details'}</button>
+                    {CLOSED_BOOKING_STATUSES.includes(selectedBooking.status) && <p className="move-hint">Only active reservations can be edited from the iPad drawer.</p>}
                   </form>
                   <div className="guest-intel-card" aria-label="Guest intelligence">
                     <div>
@@ -3390,6 +3428,7 @@ function OperatorPage() {
                     <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
                     <button disabled={busy || !selectedCanFinish} onClick={() => requestBookingActionConfirmation(selectedBooking, 'completed')}>Finish</button>
                     <button className="danger" disabled={busy || !selectedCanCancel} onClick={() => requestBookingActionConfirmation(selectedBooking, 'cancelled')}>Cancel</button>
+                    <button className="danger" disabled={busy || !selectedCanNoShow} onClick={() => requestBookingActionConfirmation(selectedBooking, 'no_show')}>No-show</button>
                     <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
                   </div>
                   <div className="selected-activity-card" aria-label="Selected party activity timeline">
@@ -3415,7 +3454,7 @@ function OperatorPage() {
               )}
               <section aria-labelledby="floor-title">
                 <h2 id="floor-title">Floor snapshot</h2>
-                <p>Spatial map mirrors the {slotLabelForTime(floorFocusTime)} service window: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
+                <p>Spatial map mirrors the {slotLabelForTime(floorFocusTime)} service window: booked, checked in, seated, finished, cancelled, no-show, open, or blocked.</p>
                 <div className="floor-legend" aria-label="Floor status legend">
                   <span><i className="legend-confirmed"></i>Booked</span>
                   <span><i className="legend-checked"></i>Checked in</span>

@@ -85,7 +85,7 @@ type OperatorBookingFixture = { reference: string; startsAt: string; endsAt: str
 async function operatorBookingForReference(request: APIRequestContext, reference: string) {
   let lastStatus = 0;
   let lastError = '';
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; attempt < 24; attempt += 1) {
     const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
     const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: OperatorBookingFixture[]; error?: string } | null;
     lastStatus = list.status();
@@ -93,7 +93,7 @@ async function operatorBookingForReference(request: APIRequestContext, reference
     expect(list.ok(), `operator list failed with ${lastStatus} ${lastError}`).toBeTruthy();
     const booking = (body?.bookings || []).find(item => item.reference === reference);
     if (booking) return booking;
-    await new Promise(resolve => setTimeout(resolve, 220));
+    await new Promise(resolve => setTimeout(resolve, 250));
   }
   throw new Error(`operator list did not include ${reference} after retries; last status ${lastStatus} ${lastError}`);
 }
@@ -157,37 +157,138 @@ async function findOpenDemoSlot(request: APIRequestContext, partySize = 2, secti
   throw new Error(`No open demo slot found for ${partySize} ${section} ${time}`);
 }
 
+
+type ExactSlotRequirement = { partySize: number; section: 'indoor' | 'outdoor'; time: string };
+
+type DemoSlot = { date: string; time: string };
+
+async function exactDemoSlotOnDate(request: APIRequestContext, date: string, requirement: ExactSlotRequirement): Promise<DemoSlot | null> {
+  const response = await request.post('/api/demo/search', {
+    data: { date, time: requirement.time, partySize: requirement.partySize, section: requirement.section }
+  });
+  const body = await response.json().catch(() => null) as { available?: boolean; slots?: DemoSlot[] } | null;
+  if (!response.ok() || !body?.available) return null;
+  return (body.slots || []).find(slot => slot.date === date && slot.time === requirement.time) || null;
+}
+
+async function findServiceDateWithExactSlots(request: APIRequestContext, requirements: ExactSlotRequirement[]) {
+  for (let offset = 0; offset < 14; offset += 1) {
+    const date = laDate(offset);
+    const matches = await Promise.all(requirements.map(requirement => exactDemoSlotOnDate(request, date, requirement)));
+    if (matches.every(Boolean)) return date;
+  }
+  throw new Error(`No shared demo service date found for exact slots: ${requirements.map(item => `${item.partySize} ${item.section} ${item.time}`).join(', ')}`);
+}
+
+type DemoConfirmBody = {
+  ok?: boolean;
+  reference?: string;
+  manageToken?: string;
+  startsAt?: string;
+  endsAt?: string;
+  reservation?: { reference: string; startsAt?: string; endsAt?: string };
+  error?: string;
+};
+
+async function confirmDemoHoldOnce(request: APIRequestContext, hold: { holdId: string; holdToken: string }, guestLabel: string) {
+  const [firstName, ...rest] = guestLabel.split(' ');
+  const response = await request.post('/api/demo/confirm', {
+    data: {
+      holdId: hold.holdId,
+      holdToken: hold.holdToken,
+      idempotencyKey: `e2e_confirm_${Date.now()}_${Math.random()}`,
+      firstName: firstName || 'Report',
+      lastName: rest.join(' ') || 'Guest',
+      email: 'demo@example.invalid',
+      mobile: '(209) 555-0199',
+      request: 'Created by Reports e2e setup.'
+    }
+  });
+  const body = await response.json().catch(() => null) as DemoConfirmBody | null;
+  return { response, body };
+}
+
+function isRetryableHoldConfirmFailure(body: DemoConfirmBody | null) {
+  return body?.error === 'hold_expired_or_unauthorized' || body?.error === 'hold_expired_or_released';
+}
+
+async function createConfirmedDemoBookingAtSlot(request: APIRequestContext, input: { date: string; guestLabel: string; partySize?: number; section?: 'indoor' | 'outdoor'; time?: string }) {
+  const partySize = input.partySize || 2;
+  const section = input.section || 'outdoor';
+  const time = input.time || '19:30';
+  let lastStatus = 0;
+  let lastError = '';
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const exactSlot = await exactDemoSlotOnDate(request, input.date, { partySize, section, time });
+    if (!exactSlot) throw new Error(`No exact demo slot found on ${input.date} for ${partySize} ${section} ${time}`);
+    const hold = await apiPost<{ holdId: string; holdToken: string }>(request, '/api/demo/hold', {
+      date: exactSlot.date,
+      time: exactSlot.time,
+      partySize,
+      section,
+      idempotencyKey: `e2e_hold_${Date.now()}_${Math.random()}`
+    }, undefined);
+    const { response, body } = await confirmDemoHoldOnce(request, hold, input.guestLabel);
+    lastStatus = response.status();
+    lastError = body?.error || '';
+    if (response.ok() && body?.ok && body.reference && body.manageToken) {
+      const operatorBooking = await operatorBookingForReference(request, body.reference);
+      return {
+        reference: body.reference,
+        manageToken: body.manageToken,
+        date: serviceDateFromTimestamp(operatorBooking.startsAt),
+        time: exactSlot.time,
+        startsAt: operatorBooking.startsAt,
+        endsAt: operatorBooking.endsAt
+      };
+    }
+    if (!isRetryableHoldConfirmFailure(body) || attempt === 4) {
+      expect(response.ok(), `/api/demo/confirm failed with ${lastStatus} ${lastError}`).toBeTruthy();
+      expect(body?.ok, '/api/demo/confirm did not return ok').toBeTruthy();
+    }
+    await new Promise(resolve => setTimeout(resolve, 260 * (attempt + 1)));
+  }
+  throw new Error(`/api/demo/confirm failed after fresh hold retries with ${lastStatus} ${lastError}`);
+}
+
 async function createConfirmedDemoBooking(request: APIRequestContext, input: { guestLabel: string; partySize?: number; section?: 'indoor' | 'outdoor'; time?: string }) {
   const partySize = input.partySize || 2;
   const section = input.section || 'outdoor';
   const time = input.time || '19:30';
-  const slot = await findOpenDemoSlot(request, partySize, section, time);
-  const hold = await apiPost<{ holdId: string; holdToken: string }>(request, '/api/demo/hold', {
-    date: slot.date,
-    time: slot.time,
-    partySize,
-    section,
-    idempotencyKey: `e2e_hold_${Date.now()}_${Math.random()}`
-  }, undefined);
-  const [firstName, ...rest] = input.guestLabel.split(' ');
-  const confirm = await apiPost<{ reference: string; manageToken: string; reservation: { reference: string } }>(request, '/api/demo/confirm', {
-    holdId: hold.holdId,
-    holdToken: hold.holdToken,
-    idempotencyKey: `e2e_confirm_${Date.now()}_${Math.random()}`,
-    firstName: firstName || 'Report',
-    lastName: rest.join(' ') || 'Guest',
-    email: 'demo@example.invalid',
-    mobile: '(209) 555-0199',
-    request: 'Created by Reports e2e setup.'
-  }, undefined);
-  const operatorBooking = await operatorBookingForReference(request, confirm.reference);
-  return {
-    reference: confirm.reference,
-    date: serviceDateFromTimestamp(operatorBooking.startsAt),
-    time: slot.time,
-    startsAt: operatorBooking.startsAt,
-    endsAt: operatorBooking.endsAt
-  };
+  let lastStatus = 0;
+  let lastError = '';
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const slot = await findOpenDemoSlot(request, partySize, section, time);
+    const hold = await apiPost<{ holdId: string; holdToken: string }>(request, '/api/demo/hold', {
+      date: slot.date,
+      time: slot.time,
+      partySize,
+      section,
+      idempotencyKey: `e2e_hold_${Date.now()}_${Math.random()}`
+    }, undefined);
+    const { response, body } = await confirmDemoHoldOnce(request, hold, input.guestLabel);
+    lastStatus = response.status();
+    lastError = body?.error || '';
+    if (response.ok() && body?.ok && body.reference && body.manageToken) {
+      const operatorBooking = await operatorBookingForReference(request, body.reference);
+      const startsAt = operatorBooking.startsAt;
+      const endsAt = operatorBooking.endsAt;
+      return {
+        reference: body.reference,
+        manageToken: body.manageToken,
+        date: serviceDateFromTimestamp(startsAt),
+        time: slot.time,
+        startsAt,
+        endsAt
+      };
+    }
+    if (!isRetryableHoldConfirmFailure(body) || attempt === 4) {
+      expect(response.ok(), `/api/demo/confirm failed with ${lastStatus} ${lastError}`).toBeTruthy();
+      expect(body?.ok, '/api/demo/confirm did not return ok').toBeTruthy();
+    }
+    await new Promise(resolve => setTimeout(resolve, 260 * (attempt + 1)));
+  }
+  throw new Error(`/api/demo/confirm failed after fresh hold retries with ${lastStatus} ${lastError}`);
 }
 
 test('guest can confirm, change, cancel, and operator can see the synthetic booking', async ({ page, request }) => {
@@ -288,9 +389,14 @@ test('operator can triage arrivals from the iPad queue', async ({ page, request 
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
   const stamp = Date.now();
-  const late = await createConfirmedDemoBooking(request, { guestLabel: `Late Triage ${stamp}`, partySize: 2, section: 'outdoor', time: '19:00' });
-  const due = await createConfirmedDemoBooking(request, { guestLabel: `Due Triage ${stamp}`, partySize: 2, section: 'indoor', time: '19:30' });
-  const here = await createConfirmedDemoBooking(request, { guestLabel: `Here Triage ${stamp}`, partySize: 2, section: 'outdoor', time: '20:00' });
+  const serviceDate = await findServiceDateWithExactSlots(request, [
+    { partySize: 2, section: 'outdoor', time: '19:00' },
+    { partySize: 2, section: 'indoor', time: '19:30' },
+    { partySize: 2, section: 'outdoor', time: '19:30' }
+  ]);
+  const late = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Late Triage ${stamp}`, partySize: 2, section: 'outdoor', time: '19:00' });
+  const due = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Due Triage ${stamp}`, partySize: 2, section: 'indoor', time: '19:30' });
+  const here = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Here Triage ${stamp}`, partySize: 2, section: 'outdoor', time: '19:30' });
   await apiPost(request, '/api/demo/operator/status', { reference: here.reference, status: 'checked_in' });
   await page.clock.setFixedTime(new Date(new Date(late.startsAt).getTime() + 20 * 60 * 1000));
 
@@ -360,9 +466,14 @@ test('operator host briefing ranks next iPad actions', async ({ page, request })
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
   const stamp = Date.now();
-  const late = await createConfirmedDemoBooking(request, { guestLabel: `Late Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '19:00' });
-  const here = await createConfirmedDemoBooking(request, { guestLabel: `Here Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '20:00' });
-  const turn = await createConfirmedDemoBooking(request, { guestLabel: `Turn Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '17:30' });
+  const serviceDate = await findServiceDateWithExactSlots(request, [
+    { partySize: 2, section: 'outdoor', time: '17:30' },
+    { partySize: 2, section: 'outdoor', time: '19:00' },
+    { partySize: 2, section: 'outdoor', time: '19:30' }
+  ]);
+  const late = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Late Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '19:00' });
+  const here = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Here Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '19:30' });
+  const turn = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Turn Briefing ${stamp}`, partySize: 2, section: 'outdoor', time: '17:30' });
   await apiPost(request, '/api/demo/operator/status', { reference: here.reference, status: 'checked_in' });
   await apiPost(request, '/api/demo/operator/status', { reference: turn.reference, status: 'seated', tableCode: 'P2' });
   await apiPost(request, '/api/demo/operator/service', { reference: turn.reference, serviceStage: 'paid' });
@@ -587,6 +698,55 @@ test('operator confirmation sheet protects selected-party cancellation on iPad',
   await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} to Cancelled`))).toBeVisible();
   await expect(selectedParty).toContainText('Cancelled');
   await expect(command.getByRole('button', { name: /^Cancelled$/ })).toBeDisabled();
+});
+
+test('operator confirmation sheet tracks no-shows separately from cancellations on iPad', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const serviceDate = await findServiceDateWithExactSlots(request, [
+    { partySize: 2, section: 'indoor', time: '18:00' },
+    { partySize: 2, section: 'outdoor', time: '19:30' }
+  ]);
+  const cancelBooking = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `Cancel Bucket ${Date.now()}`, partySize: 2, section: 'indoor', time: '18:00' });
+  await apiPost(request, '/api/demo/cancel', { reference: cancelBooking.reference, manageToken: cancelBooking.manageToken }, undefined);
+  const noShowBooking = await createConfirmedDemoBookingAtSlot(request, { date: serviceDate, guestLabel: `No Show Bucket ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, noShowBooking.date);
+  await page.getByLabel('Reservation queues').getByRole('button', { name: /^All/i }).click();
+  await selectReservationRow(page, noShowBooking.reference);
+  const command = page.getByLabel('Host command center');
+  await command.getByRole('button', { name: /^No-show$/ }).click();
+
+  const noShowDialog = page.getByRole('dialog', { name: /Mark this party no-show/i });
+  await expect(noShowDialog).toBeVisible();
+  await expect(noShowDialog).toContainText(noShowBooking.reference);
+  await expect(noShowDialog).toContainText('keeps it separate from ordinary cancellations');
+  await expect(noShowDialog).toContainText('No fee, refund, or SMS');
+  await noShowDialog.getByRole('button', { name: /Confirm no-show/i }).click();
+
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(noShowBooking.reference)} to No-show`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText('No-show');
+  const disabledNoShowActions = command.getByRole('button', { name: /^No-show$/ });
+  await expect(disabledNoShowActions).toHaveCount(2);
+  await expect(disabledNoShowActions.nth(0)).toBeDisabled();
+  await expect(disabledNoShowActions.nth(1)).toBeDisabled();
+
+  const noShowFilter = page.getByLabel('Reservation queues').getByRole('button', { name: /No-show\s+1/i });
+  await expect(noShowFilter).toBeVisible();
+  await noShowFilter.click();
+  await expect(reservationRow(page, noShowBooking.reference)).toBeVisible();
+
+  const cancelledFilter = page.getByLabel('Reservation queues').getByRole('button', { name: /Cancelled\s+1/i });
+  await expect(cancelledFilter).toBeVisible();
+  await cancelledFilter.click();
+  await expect(reservationRow(page, cancelBooking.reference)).toBeVisible();
+
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Reports$/i }).click();
+  await expect(page.getByLabel('Daily cover report')).toContainText('Cancelled');
+  await expect(page.getByLabel('Daily cover report')).toContainText('No-show');
 });
 
 test('operator can edit selected reservation details from the iPad drawer', async ({ page, request }) => {

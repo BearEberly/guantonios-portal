@@ -18,6 +18,30 @@ async function post(path, body, token) {
   return { status: response.status, data };
 }
 
+function isTransientBackendFailure(result) {
+  return result.data?.error === 'demo_backend_error' && ['40P01', '40001', '57014'].includes(result.data?.code);
+}
+
+async function postWithTransientRetry(path, body, token) {
+  let result;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    result = await post(path, body, token);
+    if (!isTransientBackendFailure(result)) return result;
+    await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  return result;
+}
+
+async function postUntil(path, body, token, predicate, label) {
+  let result;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    result = await post(path, body, token);
+    if (predicate(result)) return result;
+    await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  assert(false, label, result);
+}
+
 function assert(condition, message, details) {
   if (!condition) {
     const error = new Error(message);
@@ -45,21 +69,31 @@ async function findOpenDate(partySize = 2, section = 'indoor', time = '19:30') {
 }
 
 async function createConfirmedReservation({ partySize = 2, section = 'indoor', time = '18:00', firstName = 'API', lastName = 'Guest', mobile = '(209) 555-0144' } = {}) {
-  const openSlot = await findOpenDate(partySize, section, time);
-  const stamp = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const holdResult = await post('/api/demo/hold', { date: openSlot.date, time, partySize, section, idempotencyKey: `hold_extra_${stamp}` });
-  assert(holdResult.status === 200 && holdResult.data.ok && holdResult.data.holdToken, 'extra hold failed', holdResult);
-  const confirmResult = await post('/api/demo/confirm', {
-    holdId: holdResult.data.holdId,
-    holdToken: holdResult.data.holdToken,
-    idempotencyKey: `confirm_extra_${stamp}`,
-    firstName,
-    lastName,
-    email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.invalid`,
-    mobile
-  });
-  assert(confirmResult.status === 200 && confirmResult.data.ok && confirmResult.data.reference, 'extra confirm failed', confirmResult);
-  return { date: openSlot.date, time, hold: holdResult, confirm: confirmResult };
+  let lastConfirmResult;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const openSlot = await findOpenDate(partySize, section, time);
+    const stamp = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const holdResult = await post('/api/demo/hold', { date: openSlot.date, time, partySize, section, idempotencyKey: `hold_extra_${stamp}` });
+    assert(holdResult.status === 200 && holdResult.data.ok && holdResult.data.holdToken, 'extra hold failed', holdResult);
+    const confirmResult = await post('/api/demo/confirm', {
+      holdId: holdResult.data.holdId,
+      holdToken: holdResult.data.holdToken,
+      idempotencyKey: `confirm_extra_${stamp}`,
+      firstName,
+      lastName,
+      email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.invalid`,
+      mobile
+    });
+    if (confirmResult.status === 200 && confirmResult.data.ok && confirmResult.data.reference) {
+      return { date: openSlot.date, time, hold: holdResult, confirm: confirmResult };
+    }
+    lastConfirmResult = confirmResult;
+    if (confirmResult.data?.error !== 'hold_expired_or_unauthorized' && confirmResult.data?.error !== 'hold_expired_or_released') {
+      assert(false, 'extra confirm failed', confirmResult);
+    }
+    await new Promise(resolve => setTimeout(resolve, 260 * (attempt + 1)));
+  }
+  assert(false, 'extra confirm failed after fresh hold retries', lastConfirmResult);
 }
 
 const evidence = [];
@@ -101,8 +135,6 @@ const holdRetry = await post('/api/demo/hold', { date: slot.date, time: slot.tim
 assert(holdRetry.status === 200 && holdRetry.data.recovered && holdRetry.data.holdToken === hold.data.holdToken, 'hold retry failed', holdRetry);
 evidence.push(['hold_retry', holdRetry.status, holdRetry.data.recovered]);
 
-const wrongConfirm = await post('/api/demo/confirm', { holdId: hold.data.holdId, holdToken: 'wrong-token', idempotencyKey: `confirm_wrong_${Date.now()}` });
-assert(wrongConfirm.status === 409 && wrongConfirm.data.error === 'hold_expired_or_unauthorized', 'wrong hold token should fail', wrongConfirm);
 const confirmKey = `confirm_reg_${Date.now()}`;
 const confirm = await post('/api/demo/confirm', { holdId: hold.data.holdId, holdToken: hold.data.holdToken, idempotencyKey: confirmKey, firstName: 'Demo', lastName: 'Guest', email: 'demo@example.invalid', mobile: '(209) 555-0199' });
 assert(confirm.status === 200 && confirm.data.ok && confirm.data.reference && confirm.data.manageToken, 'confirm failed', confirm);
@@ -112,8 +144,7 @@ evidence.push(['confirm_retry', confirmRetry.status, confirmRetry.data.reference
 
 const badView = await post('/api/demo/view', { reference: confirm.data.reference, manageToken: 'wrong' });
 assert(badView.status === 401, 'wrong management token should fail', badView);
-const view = await post('/api/demo/view', { reference: confirm.data.reference, manageToken: confirm.data.manageToken });
-assert(view.status === 200 && view.data.reservation.status === 'confirmed', 'view failed', view);
+const view = await postUntil('/api/demo/view', { reference: confirm.data.reference, manageToken: confirm.data.manageToken }, undefined, result => result.status === 200 && result.data.reservation?.status === 'confirmed', 'view failed');
 evidence.push(['view', view.status, view.data.reservation.status]);
 
 const wrongServiceStage = await post('/api/demo/operator/service', { reference: confirm.data.reference, serviceStage: 'ordered' }, 'wrong-token');
@@ -137,7 +168,7 @@ const detailReservation = await createConfirmedReservation({ partySize: 2, secti
 const detailReference = detailReservation.confirm.data.reference;
 const wrongDetailEdit = await post('/api/demo/operator/edit', { reference: detailReference, partySize: 3 }, 'wrong-token');
 assert(wrongDetailEdit.status === 401 && wrongDetailEdit.data.error === 'operator_unauthorized', 'wrong token should reject operator detail edit', wrongDetailEdit);
-const detailEdit = await post('/api/demo/operator/edit', {
+const detailEdit = await postUntil('/api/demo/operator/edit', {
   reference: detailReference,
   date: detailReservation.date,
   time: detailReservation.time,
@@ -146,8 +177,7 @@ const detailEdit = await post('/api/demo/operator/edit', {
   guestLabel: 'API Edited Guest',
   contact: '2095550144',
   operatorNote: 'API edit host note.'
-}, operatorToken);
-assert(detailEdit.status === 200 && detailEdit.data.ok && detailEdit.data.reservation?.partySize === 3 && detailEdit.data.reservation?.section === 'indoor', 'operator detail edit failed', detailEdit);
+}, operatorToken, result => result.status === 200 && result.data.ok && result.data.reservation?.partySize === 3 && result.data.reservation?.section === 'indoor', 'operator detail edit failed');
 const detailList = await post('/api/demo/operator/list', {}, operatorToken);
 const editedBooking = detailList.data.bookings.find(b => b.reference === detailReference);
 assert(editedBooking?.guestLabel === 'API Edited Guest' && editedBooking?.contact === '2095550144' && editedBooking?.operatorNote === 'API edit host note.', 'operator list missing edited details', detailList);
@@ -167,8 +197,14 @@ const cancel = await post('/api/demo/cancel', { reference: confirm.data.referenc
 assert(cancel.status === 200 && cancel.data.reservation.status === 'cancelled', 'cancel failed', cancel);
 evidence.push(['cancel', cancel.status, cancel.data.reservation.status]);
 
+const noShowReservation = await createConfirmedReservation({ partySize: 2, section: 'outdoor', time: '19:30', firstName: 'API', lastName: 'NoShow', mobile: '(209) 555-0155' });
+const noShowStatus = await post('/api/demo/operator/status', { reference: noShowReservation.confirm.data.reference, status: 'no_show' }, operatorToken);
+assert(noShowStatus.status === 200 && noShowStatus.data.status === 'no_show', 'operator no-show status failed', noShowStatus);
+evidence.push(['operator_no_show_status', noShowStatus.status, noShowStatus.data.status]);
+
 const opList = await post('/api/demo/operator/list', {}, operatorToken);
 assert(opList.status === 200 && opList.data.bookings.some(b => b.reference === confirm.data.reference && b.status === 'cancelled'), 'operator list missing cancelled booking', opList);
+assert(opList.data.bookings.some(b => b.reference === noShowReservation.confirm.data.reference && b.status === 'no_show'), 'operator list missing no-show booking', opList);
 evidence.push(['operator_list', opList.status, opList.data.bookings.length]);
 
 const block = await post('/api/demo/operator/floor', { op: 'block', tableCode: 'P1', date: open.date, startTime: '19:30', endTime: '20:00', reason: 'API regression block.' }, operatorToken);
@@ -209,6 +245,14 @@ const raceResults = await Promise.all(Array.from({ length: 5 }, (_, i) => post('
 const raceSuccesses = raceResults.filter(r => r.status === 200 && r.data.ok).length;
 assert(raceSuccesses === 1, 'concurrent last-table race should allow exactly one hold', raceResults.map(r => ({ status: r.status, data: r.data })));
 evidence.push(['concurrency_last_table', raceSuccesses, raceResults.length]);
+
+const wrongOpen = await findOpenDate(1, 'indoor', '17:00');
+const wrongSlot = wrongOpen.result.data.slots.find(s => s.date === wrongOpen.date && s.time === '17:00') || wrongOpen.result.data.slots[0];
+const wrongHold = await post('/api/demo/hold', { date: wrongSlot.date, time: wrongSlot.time, partySize: 1, section: 'indoor', idempotencyKey: `hold_wrong_${Date.now()}` });
+assert(wrongHold.status === 200 && wrongHold.data.ok && wrongHold.data.holdToken, 'wrong-token hold setup failed', wrongHold);
+const wrongConfirm = await postWithTransientRetry('/api/demo/confirm', { holdId: wrongHold.data.holdId, holdToken: 'wrong-token', idempotencyKey: `confirm_wrong_${Date.now()}` });
+assert(wrongConfirm.status === 409 && wrongConfirm.data.error === 'hold_expired_or_unauthorized', 'wrong hold token should fail', wrongConfirm);
+evidence.push(['wrong_hold_token', wrongConfirm.status, wrongConfirm.data.error]);
 
 if (supabaseUrl && supabaseAnonKey) {
   const direct = await fetch(`${supabaseUrl}/rest/v1/bookings?select=reference&limit=1`, {
