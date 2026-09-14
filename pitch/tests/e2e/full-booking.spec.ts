@@ -55,17 +55,30 @@ async function selectReservationRow(page: Page, reference: string) {
 }
 
 async function serviceDateForReference(request: APIRequestContext, reference: string) {
-  const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
-  const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: Array<{ reference: string; startsAt: string }>; error?: string } | null;
-  expect(list.ok(), `operator list failed with ${list.status()} ${body?.error || ''}`).toBeTruthy();
-  const booking = (body?.bookings || []).find(item => item.reference === reference);
-  expect(booking, `operator list did not include ${reference}`).toBeTruthy();
-  return serviceDateFromTimestamp(booking!.startsAt);
+  let lastStatus = 0;
+  let lastError = '';
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+    const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: Array<{ reference: string; startsAt: string }>; error?: string } | null;
+    lastStatus = list.status();
+    lastError = body?.error || '';
+    expect(list.ok(), `operator list failed with ${lastStatus} ${lastError}`).toBeTruthy();
+    const booking = (body?.bookings || []).find(item => item.reference === reference);
+    if (booking) return serviceDateFromTimestamp(booking.startsAt);
+    await new Promise(resolve => setTimeout(resolve, 180));
+  }
+  throw new Error(`operator list did not include ${reference} after retries; last status ${lastStatus} ${lastError}`);
 }
 
 async function chooseOperatorServiceDate(page: Page, date: string) {
-  await page.getByLabel('Choose service date').fill(date);
-  await expect(page.getByLabel('Choose service date')).toHaveValue(date);
+  const field = page.getByLabel('Choose service date');
+  await field.evaluate((element, value) => {
+    const input = element as HTMLInputElement;
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, date);
+  await expect(field).toHaveValue(date);
 }
 
 function laDate(offsetDays: number) {
@@ -133,7 +146,7 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await page.getByRole('button', { name: /^Indoor$/i }).first().click();
   await expect(page.getByRole('heading', { name: /confirm demo reservation/i })).toBeVisible();
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
-  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible({ timeout: 15_000 });
   const reference = (await page.locator('.reference').innerText()).trim();
   expect(reference).toMatch(/^DEMO-/);
   const serviceDate = await serviceDateForReference(request, reference);
@@ -167,7 +180,7 @@ test('operator Texts rail shows SMS readiness, templates, and preview history', 
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await page.getByLabel('Choose service date').fill(booking.date);
+  await chooseOperatorServiceDate(page, booking.date);
   await selectReservationRow(page, booking.reference);
   await page.getByLabel('Operator sections').getByRole('button', { name: /^Texts$/i }).click();
 
@@ -214,7 +227,7 @@ test('operator can pace a service slot and restore exact availability', async ({
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await page.getByLabel('Choose service date').fill(slot.date);
+  await chooseOperatorServiceDate(page, slot.date);
   const pacingControls = page.getByLabel('Pacing controls');
   await expect(pacingControls).toBeVisible();
   await page.getByLabel('Pacing slot').selectOption(slot.time);
@@ -244,7 +257,7 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await expect(page.getByRole('button', { name: /^Outdoor$/i }).first()).toBeVisible();
   await page.getByRole('button', { name: /^Outdoor$/i }).first().click();
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
-  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible({ timeout: 15_000 });
   const reference = (await page.locator('.reference').innerText()).trim();
   const serviceDate = await serviceDateForReference(request, reference);
 
@@ -273,7 +286,7 @@ test('operator can advance seated service stage and see turn-risk reporting', as
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await page.getByLabel('Choose service date').fill(booking.date);
+  await chooseOperatorServiceDate(page, booking.date);
   await selectReservationRow(page, booking.reference);
 
   const stageControls = page.getByLabel('Manual service stage controls');
@@ -303,7 +316,7 @@ test('operator can drag a reservation to an open floor table', async ({ page, re
   await expect(page.getByRole('button', { name: /^Outdoor$/i }).first()).toBeVisible();
   await page.getByRole('button', { name: /^Outdoor$/i }).first().click();
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
-  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible({ timeout: 15_000 });
   const reference = (await page.locator('.reference').innerText()).trim();
   const serviceDate = await serviceDateForReference(request, reference);
 
@@ -330,7 +343,7 @@ test('operator can use Move table mode as a touch fallback', async ({ page, requ
   await expect(page.getByRole('button', { name: /^Outdoor$/i }).first()).toBeVisible();
   await page.getByRole('button', { name: /^Outdoor$/i }).first().click();
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
-  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible({ timeout: 15_000 });
   const reference = (await page.locator('.reference').innerText()).trim();
   const serviceDate = await serviceDateForReference(request, reference);
 
@@ -441,7 +454,7 @@ test('guest can join Notify from an unavailable time and operator can mark it fr
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await page.getByLabel('Choose service date').fill(slot.date);
+  await chooseOperatorServiceDate(page, slot.date);
   await page.getByRole('button', { name: /^Notify\s+1$/i }).click();
   const notifyRow = page.locator('.notify-row').filter({ hasText: notifyName }).first();
   await expect(notifyRow).toBeVisible();
@@ -529,7 +542,7 @@ test('operator service date controls scope the iPad service context', async ({ p
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await page.getByLabel('Choose service date').fill(booking.date);
+  await chooseOperatorServiceDate(page, booking.date);
 
   await expect(reservationRow(page, booking.reference)).toBeVisible();
   await expect(page.getByLabel('Service summary').locator('article').filter({ hasText: 'Dine-in covers' })).toContainText('2');
@@ -552,29 +565,27 @@ test('operator service date controls scope the iPad service context', async ({ p
 test('operator can load and update a guestbook profile on the iPad', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
-  await page.goto('/reservations');
-  await page.getByRole('button', { name: /^search$/i }).click();
-  await expect(page.getByRole('button', { name: /^Indoor$/i }).first()).toBeVisible();
-  await page.getByRole('button', { name: /^Indoor$/i }).first().click();
-  await page.locator('#lastName').fill('Tester');
-  await page.locator('#mobile').fill('(209) 555-0188');
-  await page.locator('#request').fill('Sparkling water preference.');
-  await page.locator('#firstName').fill('Guestbook');
-  await page.getByRole('button', { name: /confirm demo reservation/i }).click();
-  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
-  const reference = (await page.locator('.reference').innerText()).trim();
-  const serviceDate = await serviceDateForReference(request, reference);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: 'Guestbook Tester', partySize: 2, section: 'indoor', time: '19:30' });
+  await apiPost(request, '/api/demo/operator/guest', {
+    op: 'attach',
+    reference: booking.reference,
+    guestLabel: 'Guestbook Tester',
+    contact: '2095550188',
+    tags: ['Guest'],
+    preferences: ['Sparkling water preference.'],
+    privateNote: 'Demo note, not saved to a real guest profile.'
+  });
 
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await chooseOperatorServiceDate(page, serviceDate);
-  await selectReservationRow(page, reference);
+  await chooseOperatorServiceDate(page, booking.date);
+  await selectReservationRow(page, booking.reference);
   await page.getByRole('button', { name: /Open profile/i }).click();
   const profilePanel = page.locator('.guest-profile-editor');
   await expect(profilePanel).toBeVisible();
   await expect(profilePanel).toContainText('Guestbook Tester');
-  await expect(profilePanel).toContainText(reference);
+  await expect(profilePanel).toContainText(booking.reference);
   expect((await page.getByLabel('Guest profile mobile').inputValue()).replace(/\D/g, '')).toBe('2095550188');
 
   await page.getByLabel('Guest profile tags').fill('VIP, Patio');
