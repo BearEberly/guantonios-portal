@@ -133,11 +133,12 @@ const opList = await post('/api/demo/operator/list', {}, operatorToken);
 assert(opList.status === 200 && opList.data.bookings.some(b => b.reference === confirm.data.reference && b.status === 'cancelled'), 'operator list missing cancelled booking', opList);
 evidence.push(['operator_list', opList.status, opList.data.bookings.length]);
 
-const block = await post('/api/demo/operator/floor', { op: 'block', tableCode: 'P1', date: open.date, reason: 'API regression block.' }, operatorToken);
+const block = await post('/api/demo/operator/floor', { op: 'block', tableCode: 'P1', date: open.date, startTime: '19:30', endTime: '20:00', reason: 'API regression block.' }, operatorToken);
 assert(block.status === 200 && block.data.ok && block.data.tableBlock?.tableCode === 'P1', 'table block failed', block);
 const blockList = await post('/api/demo/operator/floor', { op: 'list' }, operatorToken);
 assert(blockList.status === 200 && blockList.data.tableBlocks.some(b => b.tableCode === 'P1' && b.reason === 'API regression block.'), 'table block list missing block', blockList);
-evidence.push(['operator_table_block', block.status, block.data.tableBlock.tableCode]);
+assert(block.data.tableBlock.startsAt && block.data.tableBlock.endsAt, 'table block response missing timed window', block);
+evidence.push(['operator_table_block', block.status, block.data.tableBlock.tableCode, block.data.tableBlock.startsAt, block.data.tableBlock.endsAt]);
 
 const waitCreate = await post('/api/demo/operator/waitlist', { op: 'create', guestLabel: 'API Walk In', contact: '2095550102', date: open.date, time: '19:30', partySize: 2, section: 'either', quotedWaitMinutes: 20, note: 'API regression waitlist.' }, operatorToken);
 assert(waitCreate.status === 200 && waitCreate.data.ok && waitCreate.data.waitlistId, 'waitlist create failed', waitCreate);

@@ -505,6 +505,10 @@ type AvailabilityMatrixRow = {
   pacingRule?: PacingRule | null;
 };
 
+const OPERATOR_TIME_SLOTS = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
+const OPERATOR_TIME_SLOT_KEYS = OPERATOR_TIME_SLOTS.map((_, index) => `${String(17 + Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`);
+const DEFAULT_FLOOR_FOCUS_TIME = '19:30';
+
 type ServiceStageOption = { value: ServiceStage; label: string; shortLabel: string; nextCopy: string };
 const SERVICE_STAGE_OPTIONS: ServiceStageOption[] = [
   { value: 'not_started', label: 'Not started', shortLabel: 'Start', nextCopy: 'Order has not been started.' },
@@ -557,6 +561,29 @@ function dateKeyFromTimestamp(value: string) {
   }).format(new Date(value));
 }
 
+function localTimeKeyFromTimestamp(value: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'America/Los_Angeles'
+  }).format(new Date(value));
+}
+
+function timeKeyToMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+  return (hours * 60) + minutes;
+}
+
+function rangeOverlapsSlot(startsAt: string, endsAt: string, slotTime: string, slotMinutes = 30) {
+  const start = timeKeyToMinutes(localTimeKeyFromTimestamp(startsAt));
+  const end = timeKeyToMinutes(localTimeKeyFromTimestamp(endsAt));
+  const slotStart = timeKeyToMinutes(slotTime);
+  const slotEnd = slotStart + slotMinutes;
+  return start < slotEnd && end > slotStart;
+}
+
 function dateFromDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
@@ -590,7 +617,10 @@ function OperatorPage() {
   const [dragTargetTable, setDragTargetTable] = useState<string | null>(null);
   const [operatorMode, setOperatorMode] = useState<OperatorMode>('floor');
   const [floorAction, setFloorAction] = useState<'seat' | 'block' | 'combine'>('seat');
+  const [floorFocusTime, setFloorFocusTime] = useState(DEFAULT_FLOOR_FOCUS_TIME);
   const [tableBlockReason, setTableBlockReason] = useState('Blocked from the iPad floor.');
+  const [tableBlockStartTime, setTableBlockStartTime] = useState(DEFAULT_FLOOR_FOCUS_TIME);
+  const [tableBlockEndTime, setTableBlockEndTime] = useState('20:00');
   const [blockBusy, setBlockBusy] = useState(false);
   const [activeRail, setActiveRail] = useState<OperatorRailSection>('Floor');
   const [queueFilter, setQueueFilter] = useState('All');
@@ -877,6 +907,7 @@ function OperatorPage() {
     setOperatorMode('floor');
     setActiveRail('Wait');
     setQueueFilter('Waitlist');
+    setFloorFocusTime(entry.requestedTime || localTimeKeyFromTimestamp(entry.startsAt));
     setStatus(`Seat ${entry.guestLabel} by tapping an open compatible table.`);
   }
 
@@ -922,6 +953,11 @@ function OperatorPage() {
   const tableCombinations = state?.tableCombinations || [];
   const notifications = state?.notifications || [];
   const allNotifyRequests = state?.notifyRequests || [];
+  const timeSlots = OPERATOR_TIME_SLOTS;
+  const timeSlotKeys = OPERATOR_TIME_SLOT_KEYS;
+  const slotLabelForTime = (time: string) => timeSlots[timeSlotKeys.indexOf(time)] || time;
+  const nextSlotAfter = (time: string) => timeSlotKeys.find(slot => timeKeyToMinutes(slot) > timeKeyToMinutes(time)) || timeSlotKeys[timeSlotKeys.length - 1];
+  const blockWindowLabel = (block: TableBlock) => `${formatLocalTime(block.startsAt)} to ${formatLocalTime(block.endsAt)}`;
   const bookingIsOnSelectedService = (booking: ReservationSummary) => dateKeyFromTimestamp(booking.startsAt) === selectedServiceDate;
   const holdIsOnSelectedService = (hold: { startsAt: string }) => dateKeyFromTimestamp(hold.startsAt) === selectedServiceDate;
   const waitlistIsOnSelectedService = (entry: WaitlistEntry) => entry.requestedDate === selectedServiceDate || dateKeyFromTimestamp(entry.startsAt) === selectedServiceDate;
@@ -994,8 +1030,10 @@ function OperatorPage() {
     { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 17, w: 9, h: 31 },
     { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 56, w: 9, h: 31 }
   ] as const;
-  const bookingsByTable = new Map(activeBookings.flatMap(booking => (booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : []).map(code => [code, booking] as const)));
-  const tableBlocksByTable = new Map(tableBlocks.filter(block => block.status === 'active').map(block => [block.tableCode, block]));
+  const activeFloorBookings = activeBookings.filter(booking => rangeOverlapsSlot(booking.startsAt, booking.endsAt, floorFocusTime));
+  const activeFloorBlocks = tableBlocks.filter(block => block.status === 'active' && rangeOverlapsSlot(block.startsAt, block.endsAt, floorFocusTime));
+  const bookingsByTable = new Map(activeFloorBookings.flatMap(booking => (booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : []).map(code => [code, booking] as const)));
+  const tableBlocksByTable = new Map(activeFloorBlocks.map(block => [block.tableCode, block]));
   const selectedTableCodes = selectedBooking ? (selectedBooking.tableCodes?.length ? selectedBooking.tableCodes : selectedBooking.tableCode ? [selectedBooking.tableCode] : []) : [];
   const selectedDisplayTable = selectedBooking?.tableCode || (selectedTableCodes.length ? selectedTableCodes.join('+') : 'pending');
   const selectedTurnMinutes = selectedBooking ? Math.round(Math.max(0, new Date(selectedBooking.endsAt).getTime() - new Date(selectedBooking.startsAt).getTime()) / 60000) : 0;
@@ -1100,9 +1138,6 @@ function OperatorPage() {
     { label: 'Done', count: completedCount },
     { label: 'No-show', count: cancelledCount }
   ];
-  const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
-  const timeSlotKeys = timeSlots.map((_, index) => `${String(17 + Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`);
-  const slotLabelForTime = (time: string) => timeSlots[timeSlotKeys.indexOf(time)] || time;
   const defaultPacingLimit = 10;
   const pacingRulesBySlot = new Map(pacingRules.map(rule => [rule.slotTime, rule]));
   const selectedPacingRule = pacingRulesBySlot.get(pacingSlotTime) || null;
@@ -1174,12 +1209,14 @@ function OperatorPage() {
     const key = firstTableCode || (booking.tableCode && timelineTableCodes.has(booking.tableCode) ? booking.tableCode : `${booking.section}-unassigned`);
     timelineBookingsByTable.set(key, [...(timelineBookingsByTable.get(key) || []), booking]);
   });
-  const timelineLocalKey = (value: string) => new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-    timeZone: 'America/Los_Angeles'
-  }).format(new Date(value));
+  const timelineBlocksByTable = new Map<string, TableBlock[]>();
+  tableBlocks
+    .filter(block => block.status === 'active')
+    .forEach(block => {
+      timelineBlocksByTable.set(block.tableCode, [...(timelineBlocksByTable.get(block.tableCode) || []), block]);
+    });
+  const timelineBlockCount = tableBlocks.filter(block => block.status === 'active').length;
+  const showTimelineGrid = timelineBookings.length > 0 || timelineBlockCount > 0;
   const timelineSectionGroups = sectionNames.map(sectionName => ({
     sectionName,
     tables: floorTables.filter(table => table.section === sectionName),
@@ -1190,7 +1227,7 @@ function OperatorPage() {
   const timelineCoversBySlot = timeSlotKeys.map((slotTime, index) => {
     const covers = timelineBookings
       .filter(booking => !['cancelled', 'completed'].includes(booking.status))
-      .filter(booking => timelineLocalKey(booking.startsAt) === slotTime)
+      .filter(booking => localTimeKeyFromTimestamp(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
     return { slot: timeSlots[index], covers };
   });
@@ -1198,7 +1235,7 @@ function OperatorPage() {
     const slotTime = timeSlotKeys[index];
     const covers = bookings
       .filter(booking => !['cancelled', 'completed'].includes(booking.status))
-      .filter(booking => timelineLocalKey(booking.startsAt) === slotTime)
+      .filter(booking => localTimeKeyFromTimestamp(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
     const rule = pacingRulesBySlot.get(slotTime) || null;
     const limit = rule?.maxCovers ?? defaultPacingLimit;
@@ -1275,9 +1312,13 @@ function OperatorPage() {
     .sort((a, b) => a.endsAt.localeCompare(b.endsAt))
     .slice(0, 5);
   const timelineGridColumn = (booking: ReservationSummary & { tableCode?: string }) => {
-    const startsAt = timelineLocalKey(booking.startsAt);
-    const startIndex = Math.max(0, timeSlotKeys.indexOf(startsAt));
-    const durationMs = Math.max(30 * 60 * 1000, new Date(booking.endsAt).getTime() - new Date(booking.startsAt).getTime());
+    const startsAt = localTimeKeyFromTimestamp(booking.startsAt);
+    return timelineGridColumnForRange(startsAt, booking.startsAt, booking.endsAt);
+  };
+  const timelineGridColumnForRange = (fallbackStartTime: string, startsAt: string, endsAt: string) => {
+    const startsAtKey = localTimeKeyFromTimestamp(startsAt) || fallbackStartTime;
+    const startIndex = Math.max(0, timeSlotKeys.indexOf(startsAtKey));
+    const durationMs = Math.max(30 * 60 * 1000, new Date(endsAt).getTime() - new Date(startsAt).getTime());
     const durationSlots = Math.max(1, Math.round(durationMs / (30 * 60 * 1000)));
     const span = Math.min(4, durationSlots, timeSlots.length - startIndex);
     return `${startIndex + 2} / span ${span}`;
@@ -1311,16 +1352,19 @@ function OperatorPage() {
     setSelectedWaitlistId(null);
   }
   function selectReservation(reference: string) {
+    const booking = bookings.find(item => item.reference === reference) || allBookings.find(item => item.reference === reference);
     setSelectedReference(reference);
     setSelectedWaitlistId(null);
     setSelectedGuestProfileId(null);
     setFloorAction('seat');
+    if (booking) setFloorFocusTime(localTimeKeyFromTimestamp(booking.startsAt));
   }
 
   function seedOperatorBook(time: string, section?: SeatingSection, partySize?: number) {
     setActiveRail('Book');
     setBookDate(selectedServiceDate);
     setBookTime(time);
+    setFloorFocusTime(time);
     if (section) setBookSection(section);
     if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
     setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${time}.`);
@@ -1434,7 +1478,7 @@ function OperatorPage() {
   async function seatBookingAtTable(booking: ReservationSummary, table: (typeof floorTables)[number], fromDrag = false) {
     const tableBlock = tableBlocksByTable.get(table.code);
     if (tableBlock) {
-      setStatus(`Table ${table.code} is blocked: ${tableBlock.reason}. Clear the block before seating.`);
+      setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(tableBlock)}: ${tableBlock.reason}. Clear the block before seating.`);
       return;
     }
     const tableBooking = bookingsByTable.get(table.code);
@@ -1459,7 +1503,7 @@ function OperatorPage() {
   async function seatBookingAtCombination(booking: ReservationSummary, combination: TableCombination) {
     const state = combinationStatus(combination);
     if (state.blocked) {
-      setStatus(`Table ${state.blocked.tableCode} is blocked: ${state.blocked.reason}. Clear the block before combining.`);
+      setStatus(`Table ${state.blocked.tableCode} is blocked from ${blockWindowLabel(state.blocked)}: ${state.blocked.reason}. Clear the block before combining.`);
       return;
     }
     if (state.occupied) {
@@ -1479,7 +1523,7 @@ function OperatorPage() {
   async function seatWaitlistAtCombination(entry: WaitlistEntry, combination: TableCombination) {
     const state = combinationStatus(combination);
     if (state.blocked) {
-      setStatus(`Table ${state.blocked.tableCode} is blocked: ${state.blocked.reason}. Clear the block before combining.`);
+      setStatus(`Table ${state.blocked.tableCode} is blocked from ${blockWindowLabel(state.blocked)}: ${state.blocked.reason}. Clear the block before combining.`);
       return;
     }
     if (state.occupied) {
@@ -1551,7 +1595,7 @@ function OperatorPage() {
       return;
     }
     if (tableBlock) {
-      setStatus(`Table ${table.code} is blocked: ${tableBlock.reason}. Clear the block before seating or booking.`);
+      setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(tableBlock)}: ${tableBlock.reason}. Clear the block before seating or booking.`);
       return;
     }
     await seatSelectedAtTable(table);
@@ -1577,12 +1621,24 @@ function OperatorPage() {
       setStatus(`Table ${table.code} has ${tableBooking.reference}; finish or move that party before blocking.`);
       return;
     }
+    if (timeKeyToMinutes(tableBlockEndTime) <= timeKeyToMinutes(tableBlockStartTime)) {
+      setStatus('Table block end time must be after the start time.');
+      return;
+    }
     setBlockBusy(true);
     try {
-      const result = await operatorFloor(token, { op: 'block', tableCode: table.code, date: selectedServiceDate, reason: tableBlockReason });
+      const result = await operatorFloor(token, {
+        op: 'block',
+        tableCode: table.code,
+        date: selectedServiceDate,
+        startTime: tableBlockStartTime,
+        endTime: tableBlockEndTime,
+        reason: tableBlockReason
+      });
       if (!result.ok || !result.tableBlock) throw new Error(result.error || 'Table block failed');
       setFloorAction('seat');
-      await load(undefined, `Blocked table ${table.code}: ${result.tableBlock.reason}.`);
+      setFloorFocusTime(tableBlockStartTime);
+      await load(undefined, `Blocked table ${table.code} from ${slotLabelForTime(tableBlockStartTime)} to ${slotLabelForTime(tableBlockEndTime)}: ${result.tableBlock.reason}.`);
     } catch (error) {
       setStatus(`Table block failed: ${error instanceof Error ? error.message : 'Try again.'}`);
     } finally {
@@ -2051,9 +2107,9 @@ function OperatorPage() {
             <section className="resyos-floor-stage" aria-label="Floor plan timeline">
               <div className="timeline-head" aria-label="Service timeline">
                 {timeSlots.map((slot, index) => (
-                  <span key={slot} className={index === 5 ? 'now' : ''}>
+                  <span key={slot} className={timeSlotKeys[index] === floorFocusTime ? 'now' : ''}>
                     {slot}
-                    <small>{index === 5 ? 'active' : `${Math.max(0, activeCount - index)}/10`}</small>
+                    <small>{timeSlotKeys[index] === floorFocusTime ? 'active' : `${Math.max(0, activeCount - index)}/10`}</small>
                   </span>
                 ))}
               </div>
@@ -2091,10 +2147,10 @@ function OperatorPage() {
                                 onDragLeave={() => tableDragLeave(table)}
                                 onDrop={event => dropBookingAtTable(event, table)}
                                 aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
-                                aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : tableBlock ? `, blocked, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
+                                aria-label={`Table ${table.code}, ${table.seats} seats at ${slotLabelForTime(floorFocusTime)}${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : tableBlock ? `, blocked ${blockWindowLabel(tableBlock)}, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
                               >
                                 <strong>{table.code}</strong>
-                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? 'Blocked' : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
+                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? `Blocked ${slotLabelForTime(floorFocusTime)}` : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
                                 {booking && <em>{serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em>}
                               </button>
                             );
@@ -2122,15 +2178,16 @@ function OperatorPage() {
                   <section className="operator-timeline-board" aria-label="Reservation timeline board">
                     <div className="timeline-board-head">
                       <h2>Timeline</h2>
-                      <span>{timelineBookings.length} visible parties · 90 min turns</span>
+                      <span>{timelineBookings.length} visible parties · {timelineBlockCount} timed blocks · 90 min turns</span>
                     </div>
-                    {timelineBookings.length === 0 && <p>No parties match the current filters.</p>}
-                    {timelineBookings.length > 0 && (
+                    {timelineBookings.length === 0 && timelineBlockCount === 0 && <p>No parties match the current filters.</p>}
+                    {timelineBookings.length === 0 && timelineBlockCount > 0 && <p>No parties match the current filters. Showing timed table blocks.</p>}
+                    {showTimelineGrid && (
                       <div className="timeline-grid-wrap">
                         <div className="timeline-grid" aria-label="Table lane reservation book">
                           <div className="timeline-grid-header" style={{ gridTemplateColumns: timelineGridTemplate }} role="row">
                             <strong>Table</strong>
-                            {timeSlots.map((slot, index) => <span key={slot} className={index === 5 ? 'active' : ''}>{slot}</span>)}
+                            {timeSlots.map((slot, index) => <span key={slot} className={timeSlotKeys[index] === floorFocusTime ? 'active' : ''}>{slot}</span>)}
                           </div>
                           {timelineSectionGroups.map(group => (
                             <div key={group.sectionName} className="timeline-section-group">
@@ -2140,23 +2197,43 @@ function OperatorPage() {
                               </div>
                               {group.tables.map(table => {
                                 const rowBookings = timelineBookingsByTable.get(table.code) || [];
+                                const rowBlocks = timelineBlocksByTable.get(table.code) || [];
                                 const tableBooking = bookingsByTable.get(table.code);
-                                const tableBlock = tableBlocksByTable.get(table.code);
-                                const rowCanSeat = !tableBooking && !tableBlock && canSeatAtTable(table);
+                                const focusedBlock = tableBlocksByTable.get(table.code);
+                                const rowCanSeat = !tableBooking && !focusedBlock && canSeatAtTable(table);
                                 return (
-                                  <div key={table.code} className={`timeline-table-row ${rowCanSeat ? 'assignable' : ''} ${tableBlock ? 'blocked' : ''}`} style={{ gridTemplateColumns: timelineGridTemplate }} role="row">
-                                    <button type="button" className={`timeline-table-label ${rowCanSeat ? 'assignable' : ''} ${tableBlock ? 'blocked' : ''}`} onClick={() => tableBlock ? setStatus(`Table ${table.code} is blocked: ${tableBlock.reason}.`) : seatSelectedAtTable(table)} aria-label={`Timeline table ${table.code}, ${table.seats} seats${tableBlock ? ', blocked' : ''}`}>
+                                  <div key={table.code} className={`timeline-table-row ${rowCanSeat ? 'assignable' : ''} ${focusedBlock ? 'blocked' : ''} ${rowBlocks.length ? 'has-blocks' : ''}`} style={{ gridTemplateColumns: timelineGridTemplate }} role="row">
+                                    <button type="button" className={`timeline-table-label ${rowCanSeat ? 'assignable' : ''} ${focusedBlock ? 'blocked' : ''}`} onClick={() => focusedBlock ? setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(focusedBlock)}: ${focusedBlock.reason}.`) : seatSelectedAtTable(table)} aria-label={`Timeline table ${table.code}, ${table.seats} seats${focusedBlock ? `, blocked ${blockWindowLabel(focusedBlock)}` : ''}`}>
                                       <strong>{table.code}</strong>
-                                      <span>{tableBlock ? 'Blocked' : `${table.seats}p`}</span>
+                                      <span>{focusedBlock ? `Blocked ${slotLabelForTime(floorFocusTime)}` : `${table.seats}p`}</span>
                                     </button>
-                                    {timeSlots.map((slot, index) => (
+                                    {timeSlots.map((slot, index) => {
+                                      const slotTime = timeSlotKeys[index];
+                                      const cellBlock = rowBlocks.find(block => rangeOverlapsSlot(block.startsAt, block.endsAt, slotTime));
+                                      const cellCanSeat = rowCanSeat && !cellBlock;
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={`${table.code}-${slot}`}
+                                          className={`timeline-cell ${cellBlock ? 'blocked' : ''}`}
+                                          onClick={() => cellBlock ? setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(cellBlock)}: ${cellBlock.reason}.`) : cellCanSeat ? seatSelectedAtTable(table) : seedOperatorBook(slotTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats)}
+                                          aria-label={cellBlock ? `Table ${table.code} blocked at ${slot}: ${cellBlock.reason}` : cellCanSeat ? `Seat ${selectedBooking?.reference} at table ${table.code} from ${slot}` : `Book table ${table.code} at ${slot}`}
+                                        />
+                                      );
+                                    })}
+                                    {rowBlocks.map(block => (
                                       <button
                                         type="button"
-                                        key={`${table.code}-${slot}`}
-                                        className="timeline-cell"
-                                        onClick={() => tableBlock ? setStatus(`Table ${table.code} is blocked: ${tableBlock.reason}.`) : rowCanSeat ? seatSelectedAtTable(table) : seedOperatorBook(timeSlotKeys[index], table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats)}
-                                        aria-label={tableBlock ? `Table ${table.code} blocked at ${slot}` : rowCanSeat ? `Seat ${selectedBooking?.reference} at table ${table.code} from ${slot}` : `Book table ${table.code} at ${slot}`}
-                                      />
+                                        key={block.id}
+                                        className="timeline-block-card"
+                                        style={{ gridColumn: timelineGridColumnForRange(localTimeKeyFromTimestamp(block.startsAt), block.startsAt, block.endsAt) }}
+                                        onClick={() => { setFloorFocusTime(localTimeKeyFromTimestamp(block.startsAt)); setStatus(`Table ${table.code} is blocked from ${blockWindowLabel(block)}: ${block.reason}.`); }}
+                                        aria-label={`Table ${table.code} blocked from ${blockWindowLabel(block)}: ${block.reason}`}
+                                      >
+                                        <span>Blocked</span>
+                                        <strong>{block.reason}</strong>
+                                        <em>{blockWindowLabel(block)}</em>
+                                      </button>
                                     ))}
                                     {rowBookings.map(booking => (
                                       <button
@@ -2457,7 +2534,7 @@ function OperatorPage() {
               )}
               <section aria-labelledby="floor-title">
                 <h2 id="floor-title">Floor snapshot</h2>
-                <p>Spatial map mirrors the service queue: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
+                <p>Spatial map mirrors the {slotLabelForTime(floorFocusTime)} service window: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
                 <div className="floor-legend" aria-label="Floor status legend">
                   <span><i className="legend-confirmed"></i>Booked</span>
                   <span><i className="legend-checked"></i>Checked in</span>
@@ -2468,10 +2545,36 @@ function OperatorPage() {
                   <div className="side-actions floor-control-actions">
                     <button type="button" aria-pressed={floorAction === 'seat'} disabled={blockBusy} onClick={() => setFloorAction('seat')}>Seat mode</button>
                     <button type="button" aria-pressed={floorAction === 'combine'} disabled={blockBusy} onClick={() => { setFloorAction(floorAction === 'combine' ? 'seat' : 'combine'); setMovingReference(null); }}>Combine tables</button>
-                    <button type="button" aria-pressed={floorAction === 'block'} disabled={blockBusy} onClick={() => { setFloorAction(floorAction === 'block' ? 'seat' : 'block'); setMovingReference(null); }}>Block table</button>
+                    <button type="button" aria-pressed={floorAction === 'block'} disabled={blockBusy} onClick={() => { setFloorAction(floorAction === 'block' ? 'seat' : 'block'); setMovingReference(null); setFloorFocusTime(tableBlockStartTime); }}>Block table</button>
+                  </div>
+                  <label>Floor time
+                    <select value={floorFocusTime} onChange={event => setFloorFocusTime(event.target.value)} aria-label="Floor snapshot time">
+                      {timeSlotKeys.map((time, index) => <option key={time} value={time}>{timeSlots[index]}</option>)}
+                    </select>
+                  </label>
+                  <div className="operator-book-inline table-block-times">
+                    <label>Block from
+                      <select
+                        value={tableBlockStartTime}
+                        onChange={event => {
+                          const nextStart = event.target.value;
+                          setTableBlockStartTime(nextStart);
+                          setFloorFocusTime(nextStart);
+                          if (timeKeyToMinutes(tableBlockEndTime) <= timeKeyToMinutes(nextStart)) setTableBlockEndTime(nextSlotAfter(nextStart));
+                        }}
+                        aria-label="Table block start time"
+                      >
+                        {timeSlotKeys.slice(0, -1).map((time, index) => <option key={time} value={time}>{timeSlots[index]}</option>)}
+                      </select>
+                    </label>
+                    <label>Until
+                      <select value={tableBlockEndTime} onChange={event => setTableBlockEndTime(event.target.value)} aria-label="Table block end time">
+                        {timeSlotKeys.slice(1).map((time, index) => <option key={time} value={time} disabled={timeKeyToMinutes(time) <= timeKeyToMinutes(tableBlockStartTime)}>{timeSlots[index + 1]}</option>)}
+                      </select>
+                    </label>
                   </div>
                   <label>Block note<input value={tableBlockReason} onChange={event => setTableBlockReason(event.target.value)} maxLength={110} aria-label="Table block reason" /></label>
-                  {floorAction === 'block' && <p className="move-hint">Tap an open table to block it for this dinner service.</p>}
+                  {floorAction === 'block' && <p className="move-hint">Tap an open table to block it from {slotLabelForTime(tableBlockStartTime)} to {slotLabelForTime(tableBlockEndTime)} for this dinner service.</p>}
                   {floorAction === 'combine' && <p className="move-hint">Choose a combination below, or tap a highlighted member table to find its combinations.</p>}
                 </div>
               </section>

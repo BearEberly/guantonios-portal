@@ -10,6 +10,15 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function serviceDateFromTimestamp(value: string) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(value));
+}
+
 
 async function resetDemoData(request: APIRequestContext) {
   let lastError = '';
@@ -43,6 +52,20 @@ async function selectReservationRow(page: Page, reference: string) {
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: new RegExp(`Select .* ${reference}`) }).click();
   return row;
+}
+
+async function serviceDateForReference(request: APIRequestContext, reference: string) {
+  const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+  const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: Array<{ reference: string; startsAt: string }>; error?: string } | null;
+  expect(list.ok(), `operator list failed with ${list.status()} ${body?.error || ''}`).toBeTruthy();
+  const booking = (body?.bookings || []).find(item => item.reference === reference);
+  expect(booking, `operator list did not include ${reference}`).toBeTruthy();
+  return serviceDateFromTimestamp(booking!.startsAt);
+}
+
+async function chooseOperatorServiceDate(page: Page, date: string) {
+  await page.getByLabel('Choose service date').fill(date);
+  await expect(page.getByLabel('Choose service date')).toHaveValue(date);
 }
 
 function laDate(offsetDays: number) {
@@ -113,6 +136,7 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
   const reference = (await page.locator('.reference').innerText()).trim();
   expect(reference).toMatch(/^DEMO-/);
+  const serviceDate = await serviceDateForReference(request, reference);
   await page.getByRole('link', { name: /view or change/i }).click();
   await expect(page.getByRole('heading', { name: /manage demo reservation/i })).toBeVisible();
   await page.getByRole('button', { name: /load reservation/i }).click();
@@ -124,6 +148,7 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, serviceDate);
   await expect(page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) })).toBeVisible();
   await expect(page.getByText(/SMS operations/i)).toBeVisible();
   await page.goto(manageUrl);
@@ -221,10 +246,12 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
   await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
   const reference = (await page.locator('.reference').innerText()).trim();
+  const serviceDate = await serviceDateForReference(request, reference);
 
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, serviceDate);
   await selectReservationRow(page, reference);
   const patioTable = page.getByRole('button', { name: /Table P2, 2 seats/i });
   await expect(patioTable).toBeVisible();
@@ -278,10 +305,12 @@ test('operator can drag a reservation to an open floor table', async ({ page, re
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
   await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
   const reference = (await page.locator('.reference').innerText()).trim();
+  const serviceDate = await serviceDateForReference(request, reference);
 
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, serviceDate);
   await expect(page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) })).toBeVisible();
   const dragSource = page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) });
   const patioTable = page.getByRole('button', { name: /Table P2, 2 seats/i });
@@ -303,14 +332,16 @@ test('operator can use Move table mode as a touch fallback', async ({ page, requ
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
   await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
   const reference = (await page.locator('.reference').innerText()).trim();
+  const serviceDate = await serviceDateForReference(request, reference);
 
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, serviceDate);
   await selectReservationRow(page, reference);
   await page.getByRole('button', { name: /move table/i }).click();
   await expect(page.getByText(/drag this party or tap an open highlighted table/i)).toBeVisible();
-  await page.getByRole('button', { name: /Table P2, 2 seats, open, drop/i }).click();
+  await page.getByRole('button', { name: /Table P2, 2 seats at .*open, drop/i }).click();
 
   await expect(page.getByText(new RegExp(`Seated ${reference} at table P2`))).toBeVisible();
   await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P2/i);
@@ -326,22 +357,31 @@ test('operator can block and clear an open table from the iPad floor', async ({ 
   await page.getByRole('button', { name: /open operator view/i }).click();
 
   await expect(page.getByLabel('Floor table controls')).toBeVisible();
+  await page.getByLabel('Table block start time').selectOption('19:30');
+  await page.getByLabel('Table block end time').selectOption('20:00');
   await page.getByLabel('Table block reason').fill('Manager hold for repair.');
   await page.getByRole('button', { name: /^Block table$/i }).click();
-  await expect(page.getByText(/Tap an open table to block it for this dinner service/i)).toBeVisible();
-  await page.getByRole('button', { name: /Table P1, 2 seats, open, block this table/i }).click();
+  await expect(page.getByText(/Tap an open table to block it from 7:30 to 8:00 for this dinner service/i)).toBeVisible();
+  await page.getByRole('button', { name: /Table P1, 2 seats at 7:30, open, block this table/i }).click();
 
-  await expect(page.getByText(/Blocked table P1: Manager hold for repair/i)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Table P1, 2 seats, blocked, Manager hold for repair/i })).toBeVisible();
+  await expect(page.getByText(/Blocked table P1 from 7:30 to 8:00: Manager hold for repair/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 7:30, blocked .*Manager hold for repair/i })).toBeVisible();
   await expect(page.getByLabel('Table blocks')).toContainText('Table P1');
+  await expect(page.getByLabel('Table blocks')).toContainText(/7:30 PM to 8:00 PM/i);
   await expect(page.getByLabel('Table blocks')).toContainText('Manager hold for repair.');
 
-  await page.getByRole('button', { name: /Table P1, 2 seats, blocked, Manager hold for repair/i }).click();
-  await expect(page.getByText(/Table P1 is blocked: Manager hold for repair/i)).toBeVisible();
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  await expect(page.getByRole('button', { name: /Table P1 blocked from .*Manager hold for repair/i })).toBeVisible();
+  await page.getByLabel('Floor snapshot time').selectOption('17:00');
+  await page.getByLabel('View controls').getByRole('button', { name: /^Floor$/i }).click();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 5:00, open/i })).toBeVisible();
+  await page.getByLabel('Floor snapshot time').selectOption('19:30');
+  await page.getByRole('button', { name: /Table P1, 2 seats at 7:30, blocked .*Manager hold for repair/i }).click();
+  await expect(page.getByText(/Table P1 is blocked from .*Manager hold for repair/i)).toBeVisible();
   await page.getByRole('button', { name: /Clear block on table P1/i }).click();
   await expect(page.getByText(/Cleared block on table P1/i)).toBeVisible();
   await expect(page.getByLabel('Table blocks')).toContainText('No active table blocks.');
-  await expect(page.getByRole('button', { name: /Table P1, 2 seats, open/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats at 7:30, open/i })).toBeVisible();
 });
 
 test('operator can add, notify, and seat a walk-in from the Wait rail', async ({ page, request }) => {
@@ -370,7 +410,7 @@ test('operator can add, notify, and seat a walk-in from the Wait rail', async ({
   await expect(waitRow).toContainText(/Notified/i);
   await waitRow.getByRole('button', { name: /seat from floor/i }).click();
   await expect(page.getByText(new RegExp(`Seat ${escapeRegex(walkName)} by tapping an open compatible table`, 'i'))).toBeVisible();
-  await page.getByRole('button', { name: new RegExp(`Table P1, 2 seats, open, drop ${escapeRegex(walkName)} here`, 'i') }).click();
+  await page.getByRole('button', { name: new RegExp(`Table P1, 2 seats at .*open, drop ${escapeRegex(walkName)} here`, 'i') }).click();
 
   await expect(page.getByText(/Seated waitlist party DEMO-[A-Z0-9]+ at table P1/i)).toBeVisible();
   await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table/i);
@@ -437,8 +477,8 @@ test('operator can seat an 8 top with a combined patio table setup', async ({ pa
 
   await expect(page.getByText(/Seated waitlist party DEMO-[A-Z0-9]+ at tables P3\+P4/i)).toBeVisible();
   await expect(page.locator('.selected-party-panel')).toContainText(/8 guests · outdoor · table P3\+P4/i);
-  await expect(page.getByRole('button', { name: /Table P3, 4 seats, seated, 8 guests/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Table P4, 4 seats, seated, 8 guests/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P3, 4 seats at .*seated, 8 guests/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P4, 4 seats at .*seated, 8 guests/i })).toBeVisible();
 });
 
 
@@ -523,10 +563,12 @@ test('operator can load and update a guestbook profile on the iPad', async ({ pa
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
   await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
   const reference = (await page.locator('.reference').innerText()).trim();
+  const serviceDate = await serviceDateForReference(request, reference);
 
   await page.goto('/operator');
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, serviceDate);
   await selectReservationRow(page, reference);
   await page.getByRole('button', { name: /Open profile/i }).click();
   const profilePanel = page.locator('.guest-profile-editor');
