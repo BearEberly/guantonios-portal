@@ -53,6 +53,20 @@ const open = await findOpenDate(2, 'indoor', '19:30');
 const slot = open.result.data.slots[0];
 evidence.push(['search', open.result.status, open.result.data.slots.length, open.date]);
 
+const wrongPacing = await post('/api/demo/operator/pacing', { op: 'list' }, 'wrong-token');
+assert(wrongPacing.status === 401 && wrongPacing.data.error === 'operator_unauthorized', 'wrong token should reject pacing list', wrongPacing);
+const pacingSet = await post('/api/demo/operator/pacing', { op: 'set', date: slot.date, time: slot.time, maxCovers: 1, reason: 'API regression pacing.' }, operatorToken);
+assert(pacingSet.status === 200 && pacingSet.data.ok && pacingSet.data.pacingRule?.maxCovers === 1, 'pacing set failed', pacingSet);
+const pacingList = await post('/api/demo/operator/pacing', { op: 'list' }, operatorToken);
+assert(pacingList.status === 200 && pacingList.data.pacingRules.some(r => r.id === pacingSet.data.pacingRule.id), 'pacing list missing active rule', pacingList);
+const cappedSearch = await post('/api/demo/search', { date: slot.date, time: slot.time, partySize: 2, section: 'indoor' });
+assert(!(cappedSearch.data.slots || []).some(s => s.date === slot.date && s.time === slot.time && s.exact), 'paced slot should not return exact availability for a 2-top', cappedSearch);
+const pacingClear = await post('/api/demo/operator/pacing', { op: 'clear', ruleId: pacingSet.data.pacingRule.id }, operatorToken);
+assert(pacingClear.status === 200 && pacingClear.data.ok && pacingClear.data.pacingRule?.status === 'cleared', 'pacing clear failed', pacingClear);
+const restoredSearch = await post('/api/demo/search', { date: slot.date, time: slot.time, partySize: 2, section: 'indoor' });
+assert((restoredSearch.data.slots || []).some(s => s.date === slot.date && s.time === slot.time && s.exact), 'cleared pacing should restore exact availability', restoredSearch);
+evidence.push(['operator_pacing', pacingSet.status, pacingClear.status, pacingList.data.pacingRules.length]);
+
 const holdKey = `hold_reg_${Date.now()}`;
 const hold = await post('/api/demo/hold', { date: slot.date, time: slot.time, partySize: 2, section: 'indoor', idempotencyKey: holdKey });
 assert(hold.status === 200 && hold.data.ok && hold.data.holdToken, 'hold failed', hold);
@@ -159,7 +173,11 @@ if (supabaseUrl && supabaseAnonKey) {
     headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
   });
   assert(directCombos.status >= 400, 'anon key should not directly read reservation_demo.table_combinations', directCombos.status);
-  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status, directCombos.status]);
+  const directPacing = await fetch(`${supabaseUrl}/rest/v1/pacing_rules?select=id&limit=1`, {
+    headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
+  });
+  assert(directPacing.status >= 400, 'anon key should not directly read reservation_demo.pacing_rules', directPacing.status);
+  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status, directCombos.status, directPacing.status]);
 }
 
 console.log(JSON.stringify({ ok: true, base, evidence }, null, 2));

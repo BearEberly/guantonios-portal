@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorReset, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
+import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorPacing, operatorReset, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -427,6 +427,9 @@ type AvailabilityMatrixRow = {
   outdoor: boolean;
   sections: SeatingSection[];
   reason: string;
+  covers: number;
+  limit: number;
+  pacingRule?: PacingRule | null;
 };
 
 function dateKeyFromTimestamp(value: string) {
@@ -490,6 +493,10 @@ function OperatorPage() {
   const [availabilityRows, setAvailabilityRows] = useState<AvailabilityMatrixRow[]>([]);
   const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const [availabilityStatus, setAvailabilityStatus] = useState('Live availability will refresh after the operator view loads.');
+  const [pacingSlotTime, setPacingSlotTime] = useState('19:30');
+  const [pacingMaxCovers, setPacingMaxCovers] = useState(10);
+  const [pacingReason, setPacingReason] = useState('Slow the host stand.');
+  const [pacingBusy, setPacingBusy] = useState(false);
   const [selectedWaitlistId, setSelectedWaitlistId] = useState<string | null>(null);
   const [waitGuestName, setWaitGuestName] = useState('Walk-in Guest');
   const [waitContact, setWaitContact] = useState('(209) 555-0101');
@@ -764,16 +771,19 @@ function OperatorPage() {
   const allWaitlist = state?.waitlist || [];
   const profiles = state?.profiles || [];
   const allTableBlocks = state?.tableBlocks || [];
+  const allPacingRules = state?.pacingRules || [];
   const tableCombinations = state?.tableCombinations || [];
   const notifications = state?.notifications || [];
   const bookingIsOnSelectedService = (booking: ReservationSummary) => dateKeyFromTimestamp(booking.startsAt) === selectedServiceDate;
   const holdIsOnSelectedService = (hold: { startsAt: string }) => dateKeyFromTimestamp(hold.startsAt) === selectedServiceDate;
   const waitlistIsOnSelectedService = (entry: WaitlistEntry) => entry.requestedDate === selectedServiceDate || dateKeyFromTimestamp(entry.startsAt) === selectedServiceDate;
   const blockIsOnSelectedService = (block: TableBlock) => block.serviceDate === selectedServiceDate || dateKeyFromTimestamp(block.startsAt) === selectedServiceDate;
+  const pacingRuleIsOnSelectedService = (rule: PacingRule) => rule.serviceDate === selectedServiceDate && rule.status === 'active';
   const bookings = allBookings.filter(bookingIsOnSelectedService);
   const holds = allHolds.filter(holdIsOnSelectedService);
   const waitlist = allWaitlist.filter(waitlistIsOnSelectedService);
   const tableBlocks = allTableBlocks.filter(blockIsOnSelectedService);
+  const pacingRules = allPacingRules.filter(pacingRuleIsOnSelectedService);
   const selectedServiceLabel = serviceDateLabel(selectedServiceDate);
   const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
   const activeCount = activeBookings.reduce((total, booking) => total + booking.partySize, 0);
@@ -927,6 +937,10 @@ function OperatorPage() {
   ];
   const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
   const timeSlotKeys = timeSlots.map((_, index) => `${String(17 + Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`);
+  const slotLabelForTime = (time: string) => timeSlots[timeSlotKeys.indexOf(time)] || time;
+  const defaultPacingLimit = 10;
+  const pacingRulesBySlot = new Map(pacingRules.map(rule => [rule.slotTime, rule]));
+  const selectedPacingRule = pacingRulesBySlot.get(pacingSlotTime) || null;
   const availabilityPartySize = explicitSelectedBooking?.partySize || selectedWaitlistEntry?.partySize || (typeof partySizeFilter === 'number' ? partySizeFilter : partySizeFilter === '7+' ? 7 : bookPartySize || 2);
   const partyContextLabel = operatorMode === 'availability'
     ? `Showing ${availabilityPartySize} tops`
@@ -1015,15 +1029,17 @@ function OperatorPage() {
       .reduce((total, booking) => total + booking.partySize, 0);
     return { slot: timeSlots[index], covers };
   });
-  const servicePacingLimit = 10;
   const capacityBySlot = timeSlots.map((slot, index) => {
     const slotTime = timeSlotKeys[index];
     const covers = bookings
       .filter(booking => !['cancelled', 'completed'].includes(booking.status))
       .filter(booking => timelineLocalKey(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
-    return { slot, time: slotTime, covers, remaining: Math.max(0, servicePacingLimit - covers) };
+    const rule = pacingRulesBySlot.get(slotTime) || null;
+    const limit = rule?.maxCovers ?? defaultPacingLimit;
+    return { slot, time: slotTime, covers, limit, rule, remaining: Math.max(0, limit - covers) };
   });
+  const capacityByTime = new Map(capacityBySlot.map(slot => [slot.time, slot]));
   useEffect(() => {
     if (!state) return;
     let cancelled = false;
@@ -1035,6 +1051,7 @@ function OperatorPage() {
           const result = await searchAvailability({ date: selectedServiceDate, time, partySize: availabilityPartySize });
           const exact = (result.slots || []).find(slot => slot.exact && slot.time === time) || null;
           const sections = (exact?.seating || []).map(choice => choice.section);
+          const capacity = capacityByTime.get(time);
           return {
             slot: timeSlots[index],
             time,
@@ -1042,7 +1059,10 @@ function OperatorPage() {
             indoor: sections.includes('indoor'),
             outdoor: sections.includes('outdoor'),
             sections,
-            reason: exact ? 'open' : result.available ? 'nearby_only' : result.reason || 'sold_out'
+            reason: exact ? 'open' : result.available ? 'nearby_only' : result.reason || 'sold_out',
+            covers: capacity?.covers ?? 0,
+            limit: capacity?.limit ?? defaultPacingLimit,
+            pacingRule: capacity?.rule ?? null
           };
         }));
         if (!cancelled) {
@@ -1063,17 +1083,20 @@ function OperatorPage() {
   }, [state, selectedServiceDate, availabilityPartySize]);
   const reportPacingRows = timeSlots.map((slot, index) => {
     const slotData = capacityBySlot[index];
-    const state = slotData.covers >= 10 ? 'full' : slotData.covers >= 8 ? 'tight' : slotData.covers > 0 ? 'paced' : 'open';
-    return { ...slotData, slot, state, fill: Math.min(100, Math.round((slotData.covers / 10) * 100)) };
+    const state = slotData.remaining <= 0 ? 'full' : slotData.remaining <= 2 ? 'tight' : slotData.rule || slotData.covers > 0 ? 'paced' : 'open';
+    const fill = slotData.limit > 0 ? Math.min(100, Math.round((slotData.covers / slotData.limit) * 100)) : 100;
+    return { ...slotData, slot, state, fill };
   });
-  const busiestSlot = reportPacingRows.reduce((best, slot) => slot.covers > best.covers ? slot : best, reportPacingRows[0] || { slot: '5:00', covers: 0, remaining: 10, state: 'open', fill: 0, time: '17:00' });
-  const pacingAlert = busiestSlot.covers >= 10
-    ? `${busiestSlot.slot} is full.`
-    : busiestSlot.covers >= 8
-      ? `${busiestSlot.slot} is tight with ${busiestSlot.remaining} covers left.`
-      : reportCovers > 0
-        ? `${busiestSlot.slot} is the busiest slot.`
-        : 'No covers are booked yet.';
+  const busiestSlot = reportPacingRows.reduce((best, slot) => slot.covers > best.covers ? slot : best, reportPacingRows[0] || { slot: '5:00', covers: 0, limit: defaultPacingLimit, remaining: defaultPacingLimit, state: 'open', fill: 0, time: '17:00', rule: null });
+  const pacingAlert = busiestSlot.remaining <= 0
+    ? `${busiestSlot.slot} is capped at ${busiestSlot.limit} covers.`
+    : busiestSlot.rule
+      ? `${busiestSlot.slot} is paced to ${busiestSlot.limit} covers with ${busiestSlot.remaining} open.`
+      : busiestSlot.remaining <= 2
+        ? `${busiestSlot.slot} is tight with ${busiestSlot.remaining} covers left.`
+        : reportCovers > 0
+          ? `${busiestSlot.slot} is the busiest slot.`
+          : 'No covers are booked yet.';
   const nextTableTurns = activeBookings
     .filter(booking => booking.tableCode)
     .sort((a, b) => a.endsAt.localeCompare(b.endsAt))
@@ -1404,6 +1427,34 @@ function OperatorPage() {
       setStatus(`Clear block failed: ${error instanceof Error ? error.message : 'Try again.'}`);
     } finally {
       setBlockBusy(false);
+    }
+  }
+
+  async function savePacingRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPacingBusy(true);
+    try {
+      const maxCovers = Math.max(0, Math.min(99, Number.isFinite(pacingMaxCovers) ? pacingMaxCovers : defaultPacingLimit));
+      const result = await operatorPacing(token, { op: 'set', date: selectedServiceDate, time: pacingSlotTime, maxCovers, reason: pacingReason });
+      if (!result.ok || !result.pacingRule) throw new Error(result.error || 'Pacing update failed');
+      await load(undefined, `Capped ${slotLabelForTime(pacingSlotTime)} at ${maxCovers} covers.`);
+    } catch (error) {
+      setStatus(`Pacing update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setPacingBusy(false);
+    }
+  }
+
+  async function clearPacingRule(rule: PacingRule) {
+    setPacingBusy(true);
+    try {
+      const result = await operatorPacing(token, { op: 'clear', ruleId: rule.id });
+      if (!result.ok) throw new Error(result.error || 'Clear pacing failed');
+      await load(undefined, `Cleared pacing cap for ${slotLabelForTime(rule.slotTime)}.`);
+    } catch (error) {
+      setStatus(`Clear pacing failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setPacingBusy(false);
     }
   }
 
@@ -1992,15 +2043,16 @@ function OperatorPage() {
                       <span>{selectedServiceLabel} dinner · live search for {availabilityPartySize}-tops · {availabilityBusy ? 'checking' : availabilityStatus}</span>
                     </div>
                     <div className="availability-grid">
-                      {(availabilityRows.length ? availabilityRows : capacityBySlot.map(slot => ({ slot: slot.slot, time: slot.time, available: slot.remaining > 0, indoor: false, outdoor: false, sections: [] as SeatingSection[], reason: 'checking' }))).map(slot => (
+                      {(availabilityRows.length ? availabilityRows : capacityBySlot.map(slot => ({ slot: slot.slot, time: slot.time, available: slot.remaining > 0, indoor: false, outdoor: false, sections: [] as SeatingSection[], reason: 'checking', covers: slot.covers, limit: slot.limit, pacingRule: slot.rule }))).map(slot => (
                         <article key={slot.slot} className={!slot.available ? 'full' : ''}>
                           <span>{slot.slot}</span>
-                          <strong>{slot.available ? slot.sections.length : 0}</strong>
-                          <small>{availabilityBusy ? 'Checking live inventory' : slot.available ? `${slot.sections.map(section => section === 'indoor' ? 'Indoor' : 'Patio').join(' + ')} exact` : slot.reason === 'nearby_only' ? 'Nearby times only' : 'No exact table'}</small>
+                          <strong>{slot.covers}/{slot.limit}</strong>
+                          <small>{availabilityBusy ? 'Checking live inventory' : slot.available ? `${slot.sections.map(section => section === 'indoor' ? 'Indoor' : 'Patio').join(' + ')} exact` : slot.reason === 'nearby_only' ? 'Nearby times only' : slot.pacingRule ? `Capped: ${slot.pacingRule.reason}` : 'No exact table'}</small>
                           <div className="availability-section-pills" aria-label={`${slot.slot} seating availability`}>
                             <span className={slot.indoor ? 'open' : 'closed'}>Indoor</span>
                             <span className={slot.outdoor ? 'open' : 'closed'}>Patio</span>
                           </div>
+                          <small className="availability-cap-note">{slot.pacingRule ? `Cap ${slot.limit}: ${slot.pacingRule.reason}` : `${Math.max(0, slot.limit - slot.covers)} cover slots open`}</small>
                           <button type="button" disabled={availabilityBusy || !slot.available} onClick={() => seedOperatorBook(slot.time, slot.indoor ? 'indoor' : 'outdoor', availabilityPartySize)}>Book this time</button>
                         </article>
                       ))}
@@ -2046,7 +2098,7 @@ function OperatorPage() {
                             <article key={row.slot} className={`pacing-row ${row.state}`}>
                               <div>
                                 <strong>{row.slot}</strong>
-                                <span>{row.covers}/10 covers · {row.remaining} open</span>
+                                <span>{row.covers}/{row.limit} covers · {row.remaining} open{row.rule ? ` · ${row.rule.reason}` : ''}</span>
                               </div>
                               <i aria-hidden="true"><b style={{ width: `${row.fill}%` }} /></i>
                               <em>{row.state === 'full' ? 'Full' : row.state === 'tight' ? 'Tight' : row.state === 'paced' ? 'Paced' : 'Open'}</em>
@@ -2099,7 +2151,7 @@ function OperatorPage() {
               </div>
               <footer className="cover-ticker" aria-label="Dine-in cover pacing">
                 <strong>{activeCount} DINE-IN COVERS</strong>
-                {timeSlots.map((slot, index) => <span key={slot}>{Math.max(0, activeCount - index)}/10<small>{slot}</small></span>)}
+                {capacityBySlot.map(slot => <span key={slot.slot}>{slot.covers}/{slot.limit}<small>{slot.slot}</small></span>)}
               </footer>
             </section>
             <aside className="floor-panel resyos-side-panel" tabIndex={0} aria-label="Service details">
@@ -2114,6 +2166,28 @@ function OperatorPage() {
                   </div>
                 </section>
               )}
+              <section className="floor-control-card pacing-control-card" aria-label="Pacing controls">
+                <h2>Pacing controls</h2>
+                <p>{selectedPacingRule ? `${slotLabelForTime(pacingSlotTime)} capped at ${selectedPacingRule.maxCovers}: ${selectedPacingRule.reason}` : `No cap set for ${slotLabelForTime(pacingSlotTime)}.`}</p>
+                <form onSubmit={savePacingRule}>
+                  <label>Slot
+                    <select value={pacingSlotTime} onChange={event => setPacingSlotTime(event.target.value)} aria-label="Pacing slot">
+                      {timeSlotKeys.map((time, index) => <option key={time} value={time}>{timeSlots[index]}</option>)}
+                    </select>
+                  </label>
+                  <label>Max covers<input type="number" min="0" max="99" value={pacingMaxCovers} onChange={event => setPacingMaxCovers(Math.max(0, Math.min(99, Number(event.target.value) || 0)))} aria-label="Pacing max covers" /></label>
+                  <label>Note<input value={pacingReason} onChange={event => setPacingReason(event.target.value)} maxLength={120} aria-label="Pacing note" /></label>
+                  <div className="side-actions pacing-actions">
+                    <button type="submit" disabled={pacingBusy || busy}>Save pacing cap</button>
+                    <button type="button" disabled={pacingBusy || busy || !selectedPacingRule} onClick={() => selectedPacingRule && clearPacingRule(selectedPacingRule)}>Clear pacing cap</button>
+                  </div>
+                </form>
+                {pacingRules.length > 0 && (
+                  <div className="active-pacing-list" aria-label="Active pacing rules">
+                    {pacingRules.map(rule => <span key={rule.id}>{slotLabelForTime(rule.slotTime)} · {rule.maxCovers} covers · {rule.reason}</span>)}
+                  </div>
+                )}
+              </section>
               {selectedBooking && (
                 <section aria-labelledby="selected-party-title" className={`selected-party-panel ${movingReference === selectedBooking.reference ? 'move-mode' : ''}`}>
                   <h2 id="selected-party-title">Selected party</h2>

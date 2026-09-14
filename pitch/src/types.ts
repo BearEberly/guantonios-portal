@@ -95,6 +95,18 @@ export interface TableCombination {
   updatedAt?: string;
 }
 
+export interface PacingRule {
+  id: string;
+  serviceDate: string;
+  slotTime: string;
+  maxCovers: number;
+  reason: string;
+  status: 'active' | 'cleared' | string;
+  createdAt: string;
+  updatedAt?: string;
+  clearedAt?: string | null;
+}
+
 export interface TableBlock {
   id: string;
   tableCode: string;
@@ -138,6 +150,7 @@ export interface OperatorState {
   waitlist: WaitlistEntry[];
   profiles: GuestProfile[];
   tableBlocks: TableBlock[];
+  pacingRules: PacingRule[];
   tableCombinations: TableCombination[];
   notifications: Array<{ eventType: string; status: string; adapter: string; preview: Record<string, unknown>; createdAt: string }>;
   error?: string;

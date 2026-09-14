@@ -1736,6 +1736,69 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   border-color: #eef2f5;
 }
 
+.pacing-control-card {
+  margin-bottom: 14px;
+}
+
+.pacing-control-card h2 {
+  margin: 0 0 6px;
+  color: #f8fbff;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.pacing-control-card p {
+  margin: 0 0 10px;
+  color: #aeb9c3;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pacing-control-card form {
+  display: grid;
+  gap: 9px;
+}
+
+.floor-control-card select,
+.pacing-control-card select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #3e4c58;
+  border-radius: 8px;
+  background: #18232c;
+  color: #f8fbff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 0 9px;
+  outline: none;
+}
+
+.pacing-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.active-pacing-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.active-pacing-list span,
+.availability-cap-note {
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid rgba(69, 184, 232, .35);
+  border-radius: 999px;
+  background: rgba(69, 184, 232, .1);
+  color: #dff5ff !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
 .table-block-list article {
   display: grid;
   gap: 6px;

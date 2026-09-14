@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -54,11 +54,12 @@ export function cancelReservation(input: { reference: string; manageToken: strin
 }
 
 export async function operatorList(token: string) {
-  const [state, waitlist, guests, floor] = await Promise.all([
+  const [state, waitlist, guests, floor, pacing] = await Promise.all([
     request<OperatorState>('/api/demo/operator/list', {}, token),
     request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token),
     request<{ ok: boolean; profiles: GuestProfile[]; error?: string }>('/api/demo/operator/guest', { op: 'list' }, token),
-    request<{ ok: boolean; tableBlocks: TableBlock[]; tableCombinations: TableCombination[]; error?: string }>('/api/demo/operator/floor', { op: 'list' }, token)
+    request<{ ok: boolean; tableBlocks: TableBlock[]; tableCombinations: TableCombination[]; error?: string }>('/api/demo/operator/floor', { op: 'list' }, token),
+    request<{ ok: boolean; pacingRules: PacingRule[]; error?: string }>('/api/demo/operator/pacing', { op: 'list' }, token)
   ]);
   const profilesByReference = new Map<string, GuestProfile>();
   for (const profile of guests.profiles || []) {
@@ -75,7 +76,7 @@ export async function operatorList(token: string) {
       privateNotePreview: profile.privateNote ? 'Private note' : ''
     } : booking;
   });
-  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [], tableCombinations: floor.tableCombinations || state.tableCombinations || [] };
+  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [], pacingRules: pacing.pacingRules || state.pacingRules || [], tableCombinations: floor.tableCombinations || state.tableCombinations || [] };
 }
 
 export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
@@ -92,6 +93,15 @@ export function operatorFloor(token: string, input:
   | { op: 'clear'; blockId: string }
 ) {
   return request<{ ok: boolean; tableBlock?: TableBlock; tableBlocks?: TableBlock[]; tableCombinations?: TableCombination[]; error?: string }>('/api/demo/operator/floor', input, token);
+}
+
+
+export function operatorPacing(token: string, input:
+  | { op: 'list' }
+  | { op: 'set'; date: string; time: string; maxCovers: number; reason?: string }
+  | { op: 'clear'; ruleId: string }
+) {
+  return request<{ ok: boolean; pacingRule?: PacingRule; pacingRules?: PacingRule[]; error?: string }>('/api/demo/operator/pacing', input, token);
 }
 
 export function operatorGuest(token: string, input:

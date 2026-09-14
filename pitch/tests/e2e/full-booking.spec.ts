@@ -28,8 +28,10 @@ async function resetDemoData(request: APIRequestContext) {
     const guestsBody = await guests.json().catch(() => null) as { ok?: boolean; profiles?: unknown[]; error?: string } | null;
     const floor = await request.post('/api/demo/operator/floor', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
     const floorBody = await floor.json().catch(() => null) as { ok?: boolean; tableBlocks?: unknown[]; error?: string } | null;
-    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0 && (floorBody.tableBlocks || []).length === 0) return;
-    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length} blocks=${(floorBody?.tableBlocks || []).length}`;
+    const pacing = await request.post('/api/demo/operator/pacing', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
+    const pacingBody = await pacing.json().catch(() => null) as { ok?: boolean; pacingRules?: unknown[]; error?: string } | null;
+    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && pacingBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0 && (floorBody.tableBlocks || []).length === 0 && (pacingBody.pacingRules || []).length === 0) return;
+    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length} blocks=${(floorBody?.tableBlocks || []).length} pacing=${(pacingBody?.pacingRules || []).length}`;
   }
   throw new Error(lastError || 'reset failed');
 }
@@ -176,6 +178,36 @@ test('operator Availability board uses live exact inventory for the selected par
   await expect(openSlot).toBeVisible();
   await expect(openSlot.getByRole('button', { name: /Book this time/i })).toBeEnabled();
 });
+
+test('operator can pace a service slot and restore exact availability', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const slot = await findOpenDemoSlot(request, 2, 'indoor', '19:30');
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Choose service date').fill(slot.date);
+  const pacingControls = page.getByLabel('Pacing controls');
+  await expect(pacingControls).toBeVisible();
+  await page.getByLabel('Pacing slot').selectOption(slot.time);
+  await page.getByLabel('Pacing max covers').fill('1');
+  await page.getByLabel('Pacing note').fill('Kitchen slowdown');
+  await page.getByRole('button', { name: /save pacing cap/i }).click();
+  await expect(pacingControls).toContainText('7:30 capped at 1');
+  await expect(pacingControls).toContainText('Kitchen slowdown');
+
+  const cappedSearch = await request.post('/api/demo/search', { data: { date: slot.date, time: slot.time, partySize: 2, section: 'indoor' } });
+  const cappedBody = await cappedSearch.json().catch(() => null) as { slots?: Array<{ date: string; time: string; exact?: boolean }> } | null;
+  expect((cappedBody?.slots || []).some(candidate => candidate.date === slot.date && candidate.time === slot.time && candidate.exact)).toBeFalsy();
+
+  await page.getByRole('button', { name: /clear pacing cap/i }).click();
+  await expect(pacingControls).toContainText('No cap set for 7:30');
+  const restoredSearch = await request.post('/api/demo/search', { data: { date: slot.date, time: slot.time, partySize: 2, section: 'indoor' } });
+  const restoredBody = await restoredSearch.json().catch(() => null) as { slots?: Array<{ date: string; time: string; exact?: boolean }> } | null;
+  expect((restoredBody?.slots || []).some(candidate => candidate.date === slot.date && candidate.time === slot.time && candidate.exact)).toBeTruthy();
+});
+
 
 test('operator can seat a selected party by tapping an open floor table', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
