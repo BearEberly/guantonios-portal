@@ -545,9 +545,48 @@ test('operator can run the selected-party host command tray on iPad', async ({ p
   await expect(command).toContainText('Next: Fired');
   await command.getByRole('button', { name: /^Finish$/ }).click();
 
+  const finishDialog = page.getByRole('dialog', { name: /Finish and close this table/i });
+  await expect(finishDialog).toBeVisible();
+  await expect(finishDialog).toContainText(booking.reference);
+  await expect(finishDialog).toContainText('moves the party to Done');
+  await finishDialog.getByRole('button', { name: /Confirm finish/i }).click();
+
   await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} to Completed`))).toBeVisible();
   await expect(selectedParty).toContainText('Completed');
   await expect(command.getByRole('button', { name: /^Completed$/ })).toBeDisabled();
+});
+
+test('operator confirmation sheet protects selected-party cancellation on iPad', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Confirm Cancel ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, booking.date);
+  await selectReservationRow(page, booking.reference);
+
+  const selectedParty = page.locator('.selected-party-panel');
+  const command = page.getByLabel('Host command center');
+  await command.getByRole('button', { name: /^Cancel$/ }).click();
+
+  const cancelDialog = page.getByRole('dialog', { name: /Cancel this reservation/i });
+  await expect(cancelDialog).toBeVisible();
+  await expect(cancelDialog).toContainText(booking.reference);
+  await expect(cancelDialog).toContainText('Moves this party out of live service');
+  await expect(cancelDialog).toContainText('No fee, refund, or SMS');
+  await cancelDialog.getByRole('button', { name: /Keep reservation/i }).click();
+
+  await expect(cancelDialog).toBeHidden();
+  await expect(selectedParty).toContainText('Confirmed');
+  await command.getByRole('button', { name: /^Cancel$/ }).click();
+  const secondCancelDialog = page.getByRole('dialog', { name: /Cancel this reservation/i });
+  await secondCancelDialog.getByRole('button', { name: /Confirm cancel/i }).click();
+
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} to Cancelled`))).toBeVisible();
+  await expect(selectedParty).toContainText('Cancelled');
+  await expect(command.getByRole('button', { name: /^Cancelled$/ })).toBeDisabled();
 });
 
 test('operator can edit selected reservation details from the iPad drawer', async ({ page, request }) => {

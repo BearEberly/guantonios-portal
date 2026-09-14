@@ -492,6 +492,16 @@ function ManagePage() {
 
 type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Texts' | 'Reports';
 type OperatorMode = 'floor' | 'timeline' | 'availability' | 'reports';
+type ConfirmableBookingStatus = 'completed' | 'cancelled';
+type PendingBookingAction = {
+  reference: string;
+  nextStatus: ConfirmableBookingStatus;
+  guestLabel: string;
+  partySize: number;
+  startsAt: string;
+  section: SeatingSection;
+  tableLabel: string;
+};
 type AvailabilityMatrixRow = {
   slot: string;
   time: string;
@@ -725,6 +735,7 @@ function OperatorPage() {
   const [syncState, setSyncState] = useState<OperatorSyncState>('idle');
   const [syncMessage, setSyncMessage] = useState('No successful sync yet.');
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [pendingBookingAction, setPendingBookingAction] = useState<PendingBookingAction | null>(null);
 
   function markSyncSaving(message: string) {
     setSyncState('saving');
@@ -777,6 +788,26 @@ function OperatorPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function requestBookingActionConfirmation(booking: ReservationSummary, nextStatus: ConfirmableBookingStatus) {
+    const codes = booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : [];
+    setPendingBookingAction({
+      reference: booking.reference,
+      nextStatus,
+      guestLabel: booking.guestLabel || 'Demo Guest',
+      partySize: booking.partySize,
+      startsAt: booking.startsAt,
+      section: booking.section,
+      tableLabel: booking.tableCode || (codes.length ? codes.join('+') : 'pending')
+    });
+  }
+
+  async function confirmPendingBookingAction() {
+    if (!pendingBookingAction) return;
+    const pending = pendingBookingAction;
+    const updated = await setBookingStatus(pending.reference, pending.nextStatus);
+    if (updated) setPendingBookingAction(null);
   }
 
   async function setBookingStatus(reference: string, nextStatus: string, tableCode?: string) {
@@ -3226,7 +3257,7 @@ function OperatorPage() {
                         <button type="button" disabled={busy || serviceBusy} onClick={() => updateServiceStage(selectedBooking.reference, selectedNextServiceStage)}>Mark {serviceStageLabel(selectedNextServiceStage)}</button>
                       )}
                       {selectedBooking.status === 'seated' && !selectedNextServiceStage && (
-                        <button type="button" disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish table</button>
+                        <button type="button" disabled={busy} onClick={() => requestBookingActionConfirmation(selectedBooking, 'completed')}>Finish table</button>
                       )}
                       {selectedLifecycleClosed && (
                         <button type="button" disabled>{statusLabel(selectedBooking.status)}</button>
@@ -3236,12 +3267,39 @@ function OperatorPage() {
                       <button type="button" disabled={busy || !selectedCanCheckIn} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
                       <button type="button" disabled={busy || !selectedCanSeatFromFloor || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>Seat</button>
                       <button type="button" disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move'}</button>
-                      <button type="button" disabled={busy || !selectedCanFinish} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish</button>
-                      <button type="button" className="danger" disabled={busy || !selectedCanCancel} onClick={() => setBookingStatus(selectedBooking.reference, 'cancelled')}>Cancel</button>
+                      <button type="button" disabled={busy || !selectedCanFinish} onClick={() => requestBookingActionConfirmation(selectedBooking, 'completed')}>Finish</button>
+                      <button type="button" className="danger" disabled={busy || !selectedCanCancel} onClick={() => requestBookingActionConfirmation(selectedBooking, 'cancelled')}>Cancel</button>
                       <button type="button" disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Profile</button>
                     </div>
                     {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
                   </section>
+                  {pendingBookingAction?.reference === selectedBooking.reference && (
+                    <section
+                      className={`operator-confirmation-sheet ${pendingBookingAction.nextStatus === 'cancelled' ? 'danger' : ''}`}
+                      role="dialog"
+                      aria-modal="false"
+                      aria-labelledby="operator-action-confirm-title"
+                      aria-describedby="operator-action-confirm-copy"
+                    >
+                      <div>
+                        <span>Confirm operator action</span>
+                        <strong id="operator-action-confirm-title">{pendingBookingAction.nextStatus === 'cancelled' ? 'Cancel this reservation?' : 'Finish and close this table?'}</strong>
+                        <p id="operator-action-confirm-copy">
+                          {pendingBookingAction.reference} · {pendingBookingAction.guestLabel} · {pendingBookingAction.partySize} guests · {formatLocalTime(pendingBookingAction.startsAt)} · {pendingBookingAction.section} · table {pendingBookingAction.tableLabel}
+                        </p>
+                      </div>
+                      <p>{pendingBookingAction.nextStatus === 'cancelled' ? 'Moves this party out of live service and keeps the cancellation visible in reports. No fee, refund, or SMS is sent in the demo.' : 'Marks service complete and moves the party to Done. Use this after the table is paid and ready to turn.'}</p>
+                      <div className="operator-confirmation-actions">
+                        <button type="button" onClick={() => setPendingBookingAction(null)} disabled={busy}>Keep reservation</button>
+                        <button
+                          type="button"
+                          className={pendingBookingAction.nextStatus === 'cancelled' ? 'danger' : ''}
+                          onClick={confirmPendingBookingAction}
+                          disabled={busy}
+                        >{pendingBookingAction.nextStatus === 'cancelled' ? 'Confirm cancel' : 'Confirm finish'}</button>
+                      </div>
+                    </section>
+                  )}
                   <form className="reservation-detail-editor" aria-label="Reservation detail editor" onSubmit={saveReservationDetail}>
                     <div>
                       <span>Reservation details</span>
@@ -3330,8 +3388,8 @@ function OperatorPage() {
                     <button disabled={busy || !selectedCanCheckIn} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
                     <button disabled={busy || !selectedCanSeatFromFloor || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>Seat from floor</button>
                     <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
-                    <button disabled={busy || !selectedCanFinish} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish</button>
-                    <button className="danger" disabled={busy || !selectedCanCancel} onClick={() => setBookingStatus(selectedBooking.reference, 'cancelled')}>Cancel</button>
+                    <button disabled={busy || !selectedCanFinish} onClick={() => requestBookingActionConfirmation(selectedBooking, 'completed')}>Finish</button>
+                    <button className="danger" disabled={busy || !selectedCanCancel} onClick={() => requestBookingActionConfirmation(selectedBooking, 'cancelled')}>Cancel</button>
                     <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
                   </div>
                   <div className="selected-activity-card" aria-label="Selected party activity timeline">
