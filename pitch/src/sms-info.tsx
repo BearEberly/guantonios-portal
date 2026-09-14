@@ -58,6 +58,7 @@ function Program() {
     <section aria-labelledby="sms-consent">
       <h2 id="sms-consent">How participation works</h2>
       <p>Once setup is complete, the operator will invite approved testers to start a conversation by texting the program number from their own mobile phone. This page does not collect a phone number or enroll anyone.</p>
+      <p>After reading these disclosures and receiving the operator's confirmation that texting is enabled, a suggested first message is <strong>START</strong> to <strong>+1 (209) 709-4194</strong> from your own approved mobile phone.</p>
       <p>By initiating that conversation after reviewing these disclosures, you agree to receive automated SMS replies from the Bear Eberly Photos reservation demo about your request. This permission covers the conversation you start and the demo reservation actions you request. It does not enroll you in marketing texts.</p>
       <p>Message frequency varies with your requests. Message and data rates may apply. SMS participation is optional and is not a condition of any purchase or of using the web demo.</p>
     </section>
@@ -79,6 +80,7 @@ function Privacy() {
     <section aria-labelledby="privacy-scope">
       <h2 id="privacy-scope">Scope and operator</h2>
       <p>This notice covers the optional reservation demo SMS program operated by Bear Eberly Photos. It explains the processing used when messaging is enabled. The program creates synthetic bookings, not live restaurant reservations.</p>
+      <p>Message frequency varies with your requests. Message and data rates may apply.</p>
     </section>
     <section aria-labelledby="privacy-data">
       <h2 id="privacy-data">Information used</h2>

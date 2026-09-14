@@ -30,7 +30,7 @@ export async function planReply({ body, command, state, action, env, now = new D
   let criteria = { ...(state.criteria || {}) };
   const text = body.trim().toUpperCase();
   if (command === 'STOP') return { replyText: `${BRAND}: you are opted out. No more automated replies. Text START to resume.` };
-  if (command === 'START') return { replyText: `${BRAND}: replies resumed for your requests. Synthetic bookings only. ${HELP}` };
+  if (command === 'START') return { replyText: `${BRAND}: welcome. Replies resumed for your requests. Synthetic bookings only. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. https://res.beareberly.com/sms` };
   if (command === 'HELP') return { replyText: HELP };
 
   // The model cannot confirm a reservation or choose which booking to cancel.
