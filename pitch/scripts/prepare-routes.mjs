@@ -39,8 +39,18 @@ const pages = {
         <h2 id="sms-review-proof">Opt-in proof for carrier review</h2>
         <p><strong>Opt-in methods:</strong> website checkbox and tester-initiated text keyword. No one is enrolled by default, the checkbox is not preselected, and live texting remains disabled until carrier approval.</p>
         <div class="sms-consent-box" aria-label="SMS consent call to action">
-          <p class="sms-consent-label">Website opt-in copy shown beside the phone-number field:</p>
-          <p>"I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See ${smsUrls.privacy} and ${smsUrls.terms}."</p>
+          <p class="sms-consent-label">Public website opt-in form for review:</p>
+          <form class="sms-proof-form" aria-label="Website SMS opt-in proof form">
+            <label class="sms-proof-field" for="smsProofMobile">
+              Mobile number
+              <input id="smsProofMobile" name="smsProofMobile" type="tel" placeholder="(209) 555-0198" autocomplete="tel" />
+            </label>
+            <label class="sms-proof-consent" for="smsProofConsent">
+              <input id="smsProofConsent" name="smsProofConsent" type="checkbox" />
+              <span>I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See <a href="/sms/privacy/">${smsUrls.privacy}</a> and <a href="/sms/terms/">${smsUrls.terms}</a>.</span>
+            </label>
+            <button type="button">Proof only while carrier approval is pending</button>
+          </form>
           <p class="sms-consent-label">Text this exact keyword to opt in after the operator confirms activation:</p>
           <p class="sms-keyword"><span>START</span> to <span>+1 (209) 709-4194</span></p>
           <p>Review the SMS privacy notice at <a href="/sms/privacy/">${smsUrls.privacy}</a> and SMS terms at <a href="/sms/terms/">${smsUrls.terms}</a> before using either opt-in method.</p>
@@ -164,6 +174,13 @@ const renderSmsPage = (route, page) => `<!doctype html>
       .sms-optin-card { border: 1px solid #d8d0c4; border-radius: 24px; padding: 24px; background: #fffaf1; box-shadow: 0 18px 45px rgba(64, 45, 25, .08); }
       .sms-consent-box { margin: 18px 0; padding: 18px; border: 2px solid var(--action-red); border-radius: 18px; background: #fff; }
       .sms-consent-label { margin-bottom: 8px; color: #5b342e; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+      .sms-proof-form { display: grid; gap: 12px; margin: 12px 0 18px; }
+      .sms-proof-field { display: grid; gap: 6px; color: #39241f; font-size: 14px; font-weight: 800; }
+      .sms-proof-field input { min-height: 46px; width: 100%; padding: 0 14px; border: 1px solid #d8d0c4; border-radius: 12px; background: #fffdf8; color: var(--ink); font: inherit; }
+      .sms-proof-consent { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 11px; padding: 14px; border: 1px solid #e4dccf; border-radius: 14px; background: #fbf6ec; color: #28323c; font-size: 14px; line-height: 1.45; }
+      .sms-proof-consent input { width: 19px; min-width: 19px; height: 19px; margin-top: 2px; accent-color: var(--action-red); }
+      .sms-proof-consent span { font-weight: 750; }
+      .sms-proof-form button { min-height: 42px; padding: 0 16px; border: 1px solid #191919; border-radius: 999px; background: #191919; color: #fff; font: inherit; font-size: 13px; font-weight: 800; }
       .sms-keyword { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--ink); font-size: clamp(22px, 3vw, 34px); font-weight: 800; line-height: 1.15; }
       .sms-keyword span { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; padding: 6px 12px; border-radius: 12px; background: #191919; color: #fff; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
       .sms-info-status { border-left: 3px solid var(--action-red); padding: 3px 0 3px 20px; margin: 28px 0 38px; color: #404040; font-size: 15px; }

@@ -104,6 +104,69 @@
   letter-spacing: .04em;
 }
 
+.sms-proof-form {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+
+.sms-proof-field {
+  display: grid;
+  gap: 6px;
+  color: #39241f;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.sms-proof-field input {
+  min-height: 46px;
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 12px;
+  background: #fffdf8;
+  color: var(--ink);
+  font: inherit;
+}
+
+.sms-proof-consent {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #e4dccf;
+  border-radius: 14px;
+  background: #fbf6ec;
+  color: #28323c;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sms-proof-consent input {
+  width: 19px;
+  min-width: 19px;
+  height: 19px;
+  margin-top: 2px;
+  accent-color: var(--action-red);
+}
+
+.sms-proof-consent span {
+  font-weight: 750;
+}
+
+.sms-proof-form button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #191919;
+  border-radius: 999px;
+  background: #191919;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .sms-keyword {
   display: flex;
   flex-wrap: wrap;

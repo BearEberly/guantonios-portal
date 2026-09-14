@@ -74,8 +74,18 @@ function Program() {
       <h2 id="sms-review-proof">Opt-in proof for carrier review</h2>
       <p><strong>Opt-in methods:</strong> website checkbox and tester-initiated text keyword. No one is enrolled by default, the checkbox is not preselected, and live texting remains disabled until carrier approval.</p>
       <div className="sms-consent-box" aria-label="SMS consent call to action">
-        <p className="sms-consent-label">Website opt-in copy shown beside the phone-number field:</p>
-        <p>"I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See {smsUrls.privacy} and {smsUrls.terms}."</p>
+        <p className="sms-consent-label">Public website opt-in form for review:</p>
+        <form className="sms-proof-form" aria-label="Website SMS opt-in proof form">
+          <label className="sms-proof-field" htmlFor="smsProofMobile">
+            Mobile number
+            <input id="smsProofMobile" name="smsProofMobile" type="tel" placeholder="(209) 555-0198" autoComplete="tel" />
+          </label>
+          <label className="sms-proof-consent" htmlFor="smsProofConsent">
+            <input id="smsProofConsent" name="smsProofConsent" type="checkbox" />
+            <span>I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See <a href="/sms/privacy/">{smsUrls.privacy}</a> and <a href="/sms/terms/">{smsUrls.terms}</a>.</span>
+          </label>
+          <button type="button">Proof only while carrier approval is pending</button>
+        </form>
         <p className="sms-consent-label">Text this exact keyword to opt in after the operator confirms activation:</p>
         <p className="sms-keyword"><span>START</span> to <span>+1 (209) 709-4194</span></p>
         <p>Review the SMS privacy notice at <a href="/sms/privacy">{smsUrls.privacy}</a> and SMS terms at <a href="/sms/terms">{smsUrls.terms}</a> before using either opt-in method.</p>
