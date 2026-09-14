@@ -51,10 +51,33 @@ export interface BookingResult {
   recovered?: boolean;
 }
 
+export interface WaitlistEntry {
+  id: string;
+  status: 'waiting' | 'notified' | 'seated' | 'cancelled' | string;
+  partySize: number;
+  section?: SeatingSection | null;
+  requestedDate: string;
+  requestedTime: string;
+  startsAt: string;
+  endsAt: string;
+  quotedWaitMinutes: number;
+  guestLabel: string;
+  contact?: string;
+  note?: string;
+  createdAt: string;
+  updatedAt?: string;
+  notifiedAt?: string | null;
+  seatedAt?: string | null;
+  cancelledAt?: string | null;
+  reference?: string | null;
+  tableCode?: string | null;
+}
+
 export interface OperatorState {
   ok: boolean;
   bookings: Array<ReservationSummary & { tableCode?: string; createdAt?: string }>;
   holds: Array<{ id: string; partySize: number; section: SeatingSection; startsAt: string; expiresAt: string; status: string }>;
+  waitlist: WaitlistEntry[];
   notifications: Array<{ eventType: string; status: string; adapter: string; preview: Record<string, unknown>; createdAt: string }>;
   error?: string;
 }

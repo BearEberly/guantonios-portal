@@ -65,6 +65,10 @@ export async function callOperatorStatusRpc(env, payload) {
   return callSupabaseRpc(env, 'reservation_demo_operator_status', { payload, secret: env.DEMO_API_SECRET });
 }
 
+export async function callOperatorWaitlistRpc(env, payload) {
+  return callSupabaseRpc(env, 'reservation_demo_operator_waitlist', { payload, secret: env.DEMO_API_SECRET });
+}
+
 export async function callResetRpc(env) {
   return callSupabaseRpc(env, 'reservation_demo_reset', { secret: env.DEMO_API_SECRET });
 }
@@ -101,6 +105,6 @@ export async function handleOperatorStatus(request, env) {
 function mapStatus(error) {
   if (error === 'unauthorized' || error === 'operator_unauthorized' || error === 'not_found_or_unauthorized') return 401;
   if (error === 'demo_environment_missing') return 503;
-  if (error === 'slot_unavailable' || error === 'hold_expired_or_unauthorized' || error === 'table_unavailable') return 409;
+  if (['slot_unavailable', 'hold_expired_or_unauthorized', 'table_unavailable', 'table_size_mismatch', 'table_required', 'section_mismatch'].includes(error)) return 409;
   return 400;
 }

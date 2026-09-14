@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, operatorList, operatorReset, operatorStatus, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection } from './types';
+import { cancelReservation, changeReservation, confirmReservation, createHold, operatorList, operatorReset, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -442,6 +442,16 @@ function OperatorPage() {
   const [bookSlots, setBookSlots] = useState<AvailabilitySlot[]>([]);
   const [bookStatus, setBookStatus] = useState('Search live demo availability before booking from the iPad.');
   const [bookBusy, setBookBusy] = useState(false);
+  const [selectedWaitlistId, setSelectedWaitlistId] = useState<string | null>(null);
+  const [waitGuestName, setWaitGuestName] = useState('Walk-in Guest');
+  const [waitContact, setWaitContact] = useState('(209) 555-0101');
+  const [waitDate, setWaitDate] = useState(nextBookableDate());
+  const [waitTime, setWaitTime] = useState('19:30');
+  const [waitPartySize, setWaitPartySize] = useState(2);
+  const [waitSection, setWaitSection] = useState<SeatingSection | 'either'>('either');
+  const [waitQuote, setWaitQuote] = useState(25);
+  const [waitNote, setWaitNote] = useState('Walk-in from the host stand.');
+  const [waitBusy, setWaitBusy] = useState(false);
 
   async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
     event?.preventDefault();
@@ -465,6 +475,7 @@ function OperatorPage() {
       const result = await operatorStatus(token, reference, nextStatus, tableCode);
       if (!result.ok) throw new Error(result.error || 'Operator update failed');
       setSelectedReference(reference);
+      setSelectedWaitlistId(null);
       if (nextStatus === 'seated') setQueueFilter('Seated');
       if (nextStatus === 'completed') setQueueFilter('Done');
       if (nextStatus === 'cancelled') setQueueFilter('No-show');
@@ -483,6 +494,7 @@ function OperatorPage() {
     try {
       await operatorReset(token);
       setSelectedReference(null);
+      setSelectedWaitlistId(null);
       setQueueFilter('All');
       await load(undefined, 'Synthetic demo data reset.');
     } catch (error) {
@@ -534,6 +546,7 @@ function OperatorPage() {
       });
       if (!result.ok || !result.reference) throw new Error(result.error || 'Confirm failed');
       setSelectedReference(result.reference);
+      setSelectedWaitlistId(null);
       setQueueFilter('Booked');
       setOperatorMode('floor');
       setActiveRail('Floor');
@@ -549,18 +562,102 @@ function OperatorPage() {
     }
   }
 
+  async function createWaitlistEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWaitBusy(true);
+    const message = `Adding ${waitPartySize}-top to the waitlist.`;
+    setStatus(message);
+    try {
+      const result = await operatorWaitlist(token, {
+        op: 'create',
+        guestLabel: waitGuestName,
+        contact: normalizeDemoMobile(waitContact),
+        date: waitDate,
+        time: waitTime,
+        partySize: waitPartySize,
+        section: waitSection,
+        quotedWaitMinutes: waitQuote,
+        note: waitNote
+      });
+      if (!result.ok || !result.waitlistId) throw new Error(result.error || 'Waitlist add failed');
+      setSelectedWaitlistId(result.waitlistId);
+      setSelectedReference(null);
+      setQueueFilter('Waitlist');
+      setActiveRail('Wait');
+      setOperatorMode('floor');
+      await load(undefined, `Added ${result.entry?.guestLabel || waitGuestName} to the waitlist for ${waitPartySize}.`);
+    } catch (error) {
+      setStatus(`Waitlist add failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setWaitBusy(false);
+    }
+  }
+
+  async function updateWaitlistStatus(entry: WaitlistEntry, nextStatus: 'waiting' | 'notified' | 'cancelled') {
+    setWaitBusy(true);
+    try {
+      const result = await operatorWaitlist(token, { op: 'status', waitlistId: entry.id, status: nextStatus });
+      if (!result.ok) throw new Error(result.error || 'Waitlist update failed');
+      if (nextStatus === 'cancelled') setSelectedWaitlistId(null);
+      await load(undefined, `${entry.guestLabel} marked ${statusLabel(nextStatus)} on the waitlist.`);
+    } catch (error) {
+      setStatus(`Waitlist update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setWaitBusy(false);
+    }
+  }
+
+  async function startWaitlistSeating(entry: WaitlistEntry) {
+    setSelectedWaitlistId(entry.id);
+    setSelectedReference(null);
+    setMovingReference(null);
+    setOperatorMode('floor');
+    setActiveRail('Wait');
+    setQueueFilter('Waitlist');
+    setStatus(`Seat ${entry.guestLabel} by tapping an open compatible table.`);
+  }
+
+  async function seatWaitlistAtTable(entry: WaitlistEntry, table: (typeof floorTables)[number]) {
+    if (!['waiting', 'notified'].includes(entry.status)) {
+      setStatus(`${entry.guestLabel} is ${statusLabel(entry.status)} and cannot be seated.`);
+      return;
+    }
+    if (entry.partySize > table.seats) {
+      setStatus(`Table ${table.code} only seats ${table.seats}; choose a larger table for ${entry.partySize}.`);
+      return;
+    }
+    setWaitBusy(true);
+    try {
+      const result = await operatorWaitlist(token, { op: 'seat', waitlistId: entry.id, tableCode: table.code });
+      if (!result.ok || !result.reference) throw new Error(result.error || 'Waitlist seating failed');
+      setSelectedWaitlistId(null);
+      setSelectedReference(result.reference);
+      setQueueFilter('Seated');
+      setActiveRail('Floor');
+      await load(undefined, `Seated waitlist party ${result.reference} at table ${table.code}.`);
+    } catch (error) {
+      setStatus(`Waitlist seating failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setWaitBusy(false);
+    }
+  }
+
   const bookings = state?.bookings || [];
   const holds = state?.holds || [];
+  const waitlist = state?.waitlist || [];
   const notifications = state?.notifications || [];
-  const serviceDate = bookings[0]?.startsAt || holds[0]?.startsAt || new Date().toISOString();
+  const serviceDate = bookings[0]?.startsAt || holds[0]?.startsAt || waitlist[0]?.startsAt || new Date().toISOString();
   const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
   const activeCount = activeBookings.reduce((total, booking) => total + booking.partySize, 0);
   const bookedCount = bookings.filter(booking => booking.status === 'confirmed').length;
   const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
   const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
   const previewCount = notifications.length;
+  const openWaitlist = waitlist.filter(entry => ['waiting', 'notified'].includes(entry.status));
+  const waitlistCount = openWaitlist.length;
   const explicitSelectedBooking = selectedReference ? bookings.find(booking => booking.reference === selectedReference) || null : null;
-  const selectedBooking = explicitSelectedBooking || activeBookings[0] || bookings[0] || null;
+  const selectedWaitlistEntry = selectedWaitlistId ? waitlist.find(entry => entry.id === selectedWaitlistId) || null : null;
+  const selectedBooking = selectedWaitlistEntry ? null : explicitSelectedBooking || activeBookings[0] || bookings[0] || null;
   const floorTables = [
     { code: '12', section: 'Dining Room', seats: 2, shape: 'round', x: 11, y: 18, w: 12, h: 17 },
     { code: '14', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 18, w: 13, h: 18 },
@@ -610,12 +707,24 @@ function OperatorPage() {
   const visibleBookings = bookings.filter(booking => queueMatches(booking) && partyMatches(booking) && searchMatches(booking));
   const visibleActiveCovers = visibleBookings.filter(booking => !['cancelled', 'completed'].includes(booking.status)).reduce((total, booking) => total + booking.partySize, 0);
   const openHolds = holds.filter(hold => !['confirmed', 'cancelled', 'expired'].includes(hold.status));
+  const waitlistMatches = (entry: WaitlistEntry) => {
+    const query = queueSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [entry.guestLabel, entry.id, entry.section || 'either', entry.requestedTime, entry.reference || '', entry.tableCode || '']
+      .some(value => value.toLowerCase().includes(query));
+  };
+  const waitlistPartyMatches = (entry: WaitlistEntry) => {
+    if (!partySizeFilter) return true;
+    if (partySizeFilter === '7+') return entry.partySize >= 7;
+    return entry.partySize === partySizeFilter;
+  };
+  const visibleWaitlist = queueFilter === 'Waitlist' ? openWaitlist.filter(entry => waitlistPartyMatches(entry) && waitlistMatches(entry)) : [];
   const visibleHolds = queueFilter === 'Waitlist' ? openHolds : [];
   const visibleNotifications = queueFilter === 'Notify' ? notifications : [];
   const railGroups = [
     { label: 'All', count: bookings.length },
     { label: 'Notify', count: previewCount },
-    { label: 'Waitlist', count: openHolds.length },
+    { label: 'Waitlist', count: waitlistCount },
     { label: 'Booked', count: bookedCount },
     { label: 'Seated', count: seatedCount },
     { label: 'Done', count: bookings.filter(booking => booking.status === 'completed').length },
@@ -627,7 +736,7 @@ function OperatorPage() {
   const railItems: Array<{ icon: string; label: OperatorRailSection; count: number }> = [
     { icon: 'book', label: 'Book', count: bookedCount },
     { icon: 'floor', label: 'Floor', count: activeBookings.length },
-    { icon: 'wait', label: 'Wait', count: openHolds.length },
+    { icon: 'wait', label: 'Wait', count: waitlistCount },
     { icon: 'guest', label: 'Guests', count: bookings.length },
     { icon: 'reports', label: 'Reports', count: previewCount }
   ];
@@ -702,12 +811,16 @@ function OperatorPage() {
   }
   const movingBooking = movingReference ? bookings.find(booking => booking.reference === movingReference) || null : null;
   const moveCandidate = movingBooking || explicitSelectedBooking;
+  const waitlistSeatCandidate = selectedWaitlistEntry && ['waiting', 'notified'].includes(selectedWaitlistEntry.status) ? selectedWaitlistEntry : null;
+  const activeSeatCandidate = moveCandidate || waitlistSeatCandidate;
   const canMoveBooking = (booking?: ReservationSummary | null) => Boolean(booking && !['cancelled', 'completed'].includes(booking.status));
   const canSeatBookingAtTable = (booking: ReservationSummary | null | undefined, table: (typeof floorTables)[number]) => Boolean(booking && canMoveBooking(booking) && booking.partySize <= table.seats);
-  const canSeatAtTable = (table: (typeof floorTables)[number]) => canSeatBookingAtTable(moveCandidate, table);
+  const canSeatWaitlistAtTable = (entry: WaitlistEntry | null | undefined, table: (typeof floorTables)[number]) => Boolean(entry && ['waiting', 'notified'].includes(entry.status) && entry.partySize <= table.seats && (!entry.section || entry.section === (table.section === 'Patio' ? 'outdoor' : 'indoor')));
+  const canSeatAtTable = (table: (typeof floorTables)[number]) => moveCandidate ? canSeatBookingAtTable(moveCandidate, table) : canSeatWaitlistAtTable(waitlistSeatCandidate, table);
 
   function beginMoveMode(booking: ReservationSummary) {
     setSelectedReference(booking.reference);
+    setSelectedWaitlistId(null);
     setMovingReference(booking.reference);
     setOperatorMode('floor');
     setActiveRail('Floor');
@@ -720,6 +833,7 @@ function OperatorPage() {
       return;
     }
     setSelectedReference(booking.reference);
+    setSelectedWaitlistId(null);
     setMovingReference(booking.reference);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', booking.reference);
@@ -757,6 +871,7 @@ function OperatorPage() {
     const tableBooking = bookingsByTable.get(table.code);
     if (tableBooking && tableBooking.reference !== booking.reference) {
       setSelectedReference(tableBooking.reference);
+      setSelectedWaitlistId(null);
       setStatus(`Selected ${tableBooking.reference} at table ${table.code}.`);
       return;
     }
@@ -774,12 +889,16 @@ function OperatorPage() {
   }
 
   async function seatSelectedAtTable(table: (typeof floorTables)[number]) {
-    if (!moveCandidate) {
-      seedOperatorBook(bookTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats);
-      setStatus(`Started a ${table.seats}-top booking search from open table ${table.code}.`);
+    if (moveCandidate) {
+      await seatBookingAtTable(moveCandidate, table);
       return;
     }
-    await seatBookingAtTable(moveCandidate, table);
+    if (waitlistSeatCandidate) {
+      await seatWaitlistAtTable(waitlistSeatCandidate, table);
+      return;
+    }
+    seedOperatorBook(bookTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats);
+    setStatus(`Started a ${table.seats}-top booking search from open table ${table.code}.`);
   }
 
   return (
@@ -859,6 +978,7 @@ function OperatorPage() {
               <article><span>Booked</span><strong>{bookedCount}</strong></article>
               <article><span>Checked in</span><strong>{checkInCount}</strong></article>
               <article><span>Seated</span><strong>{seatedCount}</strong></article>
+              <article><span>Waitlist</span><strong>{waitlistCount}</strong></article>
               <article><span>Text previews</span><strong>{previewCount}</strong></article>
             </section>
             <section className="resyos-workbench">
@@ -919,13 +1039,65 @@ function OperatorPage() {
                 <div className="section-heading">
                   <div>
                     <h2>Reservations</h2>
-                    <p>{queueFilter} queue · {visibleBookings.length + visibleHolds.length + visibleNotifications.length} visible · {visibleActiveCovers} active covers.</p>
+                    <p>{queueFilter} queue · {visibleBookings.length + visibleWaitlist.length + visibleHolds.length + visibleNotifications.length} visible · {visibleActiveCovers} active covers.</p>
                   </div>
                 </div>
+                {activeRail === 'Wait' && (
+                  <form className="waitlist-form" aria-label="Add walk-in waitlist party" onSubmit={createWaitlistEntry}>
+                    <div className="waitlist-form-head">
+                      <strong>Add walk-in</strong>
+                      <span>Quote, notify, and seat from the floor.</span>
+                    </div>
+                    <label>Guest<input value={waitGuestName} onChange={event => setWaitGuestName(event.target.value)} aria-label="Waitlist guest name" /></label>
+                    <label>Mobile<input value={waitContact} onChange={event => setWaitContact(event.target.value)} aria-label="Waitlist guest mobile" /></label>
+                    <div className="operator-book-inline">
+                      <label>Time<input type="time" value={waitTime} onChange={event => setWaitTime(event.target.value)} aria-label="Waitlist requested time" /></label>
+                      <label>Quote<input type="number" min="0" max="240" value={waitQuote} onChange={event => setWaitQuote(Number(event.target.value))} aria-label="Quoted wait minutes" /></label>
+                    </div>
+                    <div className="operator-book-inline">
+                      <label>Party<select value={waitPartySize} onChange={event => setWaitPartySize(Number(event.target.value))} aria-label="Waitlist party size">{[1, 2, 3, 4, 5, 6, 7, 8].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
+                      <label>Area<select value={waitSection} onChange={event => setWaitSection(event.target.value as SeatingSection | 'either')} aria-label="Waitlist seating preference"><option value="either">Either</option><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></label>
+                    </div>
+                    <label>Note<textarea value={waitNote} onChange={event => setWaitNote(event.target.value)} maxLength={180} aria-label="Waitlist note" /></label>
+                    <input type="hidden" value={waitDate} readOnly />
+                    <button type="submit" disabled={busy || waitBusy}>{waitBusy ? 'Adding...' : 'Add to waitlist'}</button>
+                  </form>
+                )}
                 {bookings.length === 0 && queueFilter !== 'Waitlist' && queueFilter !== 'Notify' && <p>No synthetic bookings yet.</p>}
-                {queueFilter === 'Waitlist' && visibleHolds.length === 0 && <p>No open demo holds.</p>}
+                {queueFilter === 'Waitlist' && visibleWaitlist.length === 0 && <p>No active walk-ins on the waitlist.</p>}
                 {queueFilter === 'Notify' && visibleNotifications.length === 0 && <p>No notification previews yet.</p>}
                 {bookings.length > 0 && queueFilter !== 'Waitlist' && queueFilter !== 'Notify' && visibleBookings.length === 0 && <p>No parties match this queue, party size, or search.</p>}
+                {visibleWaitlist.map(entry => (
+                  <article key={entry.id} className={`operator-row waitlist-row ${entry.status} ${selectedWaitlistId === entry.id ? 'selected' : ''}`}>
+                    <button
+                      type="button"
+                      className="operator-row-select"
+                      onClick={() => { setSelectedWaitlistId(entry.id); setSelectedReference(null); }}
+                      aria-label={`Select waitlist ${entry.guestLabel}`}
+                    >
+                      <span className="sr-only">Select waitlist party</span>
+                    </button>
+                    <div className="operator-guest">
+                      <strong>{entry.guestLabel}</strong>
+                      <span>{entry.id.slice(0, 8)} · {entry.quotedWaitMinutes} min quote</span>
+                    </div>
+                    <div className="operator-time">
+                      <strong>{formatLocalTime(entry.startsAt)}</strong>
+                      <span>{entry.partySize} guests · {entry.section || 'either'} · {entry.note || 'Walk-in'}</span>
+                    </div>
+                    <div className="operator-tags" aria-label="Waitlist service notes">
+                      <span>Walk-in</span>
+                      <span>{entry.section || 'either'}</span>
+                      <span>{entry.partySize} top</span>
+                    </div>
+                    <span className="status-pill">{statusLabel(entry.status)}</span>
+                    <div className="operator-actions">
+                      <button disabled={busy || waitBusy || entry.status === 'notified'} onClick={() => updateWaitlistStatus(entry, 'notified')}>Notify</button>
+                      <button disabled={busy || waitBusy} onClick={() => startWaitlistSeating(entry)}>Seat from floor</button>
+                      <button disabled={busy || waitBusy} onClick={() => updateWaitlistStatus(entry, 'cancelled')}>Cancel</button>
+                    </div>
+                  </article>
+                ))}
                 {visibleHolds.map(hold => (
                   <article key={hold.id} className="operator-row hold-row">
                     <div className="operator-guest">
@@ -966,7 +1138,7 @@ function OperatorPage() {
                       draggable={canMoveBooking(booking)}
                       onDragStart={event => beginReservationDrag(event, booking)}
                       onDragEnd={endReservationDrag}
-                      onClick={() => setSelectedReference(booking.reference)}
+                      onClick={() => { setSelectedReference(booking.reference); setSelectedWaitlistId(null); }}
                       aria-label={`Select ${booking.guestLabel || 'Demo Guest'} ${booking.reference}`}
                     >
                       <span className="sr-only">Select reservation</span>
@@ -1022,9 +1194,9 @@ function OperatorPage() {
                             const booking = bookingsByTable.get(table.code);
                             const tileStatus = booking ? booking.status : 'open';
                             const assignable = !booking && canSeatAtTable(table);
-                            const dropReady = assignable && Boolean(moveCandidate);
+                            const dropReady = assignable && Boolean(activeSeatCandidate);
                             const dragOver = dragTargetTable === table.code;
-                            const tooSmall = !booking && Boolean(moveCandidate && canMoveBooking(moveCandidate) && moveCandidate.partySize > table.seats);
+                            const tooSmall = !booking && Boolean(activeSeatCandidate && activeSeatCandidate.partySize > table.seats);
                             return (
                               <button
                                 type="button"
@@ -1036,7 +1208,7 @@ function OperatorPage() {
                                 onDragLeave={() => tableDragLeave(table)}
                                 onDrop={event => dropBookingAtTable(event, table)}
                                 aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
-                                aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : assignable ? `, open, drop ${moveCandidate?.reference || 'selected party'} here` : ', open'}`}
+                                aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : ', open'}`}
                               >
                                 <strong>{table.code}</strong>
                                 <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : assignable ? (movingReference ? 'Drop here' : 'Seat here') : `${table.seats}p`}</span>
@@ -1051,6 +1223,13 @@ function OperatorPage() {
                         <span>{formatLocalTime(selectedBooking.startsAt)}</span>
                         <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
                         <p>{selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                      </aside>
+                    )}
+                    {selectedWaitlistEntry && (
+                      <aside className={`guest-popover waitlist ${selectedWaitlistEntry.status}`} aria-label="Selected waitlist preview">
+                        <span>{formatLocalTime(selectedWaitlistEntry.startsAt)}</span>
+                        <strong>{selectedWaitlistEntry.guestLabel}</strong>
+                        <p>{selectedWaitlistEntry.partySize} guests · {selectedWaitlistEntry.section || 'either'} · {selectedWaitlistEntry.quotedWaitMinutes} min quote · {statusLabel(selectedWaitlistEntry.status)}</p>
                       </aside>
                     )}
                   </>
@@ -1103,7 +1282,7 @@ function OperatorPage() {
                                         draggable={canMoveBooking(booking)}
                                         onDragStart={event => beginReservationDrag(event, booking)}
                                         onDragEnd={endReservationDrag}
-                                        onClick={() => setSelectedReference(booking.reference)}
+                                        onClick={() => { setSelectedReference(booking.reference); setSelectedWaitlistId(null); }}
                                         aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, table ${booking.tableCode || 'pending'}`}
                                       >
                                         <span>{formatLocalTime(booking.startsAt)}</span>
@@ -1139,7 +1318,7 @@ function OperatorPage() {
                                       draggable={canMoveBooking(booking)}
                                       onDragStart={event => beginReservationDrag(event, booking)}
                                       onDragEnd={endReservationDrag}
-                                      onClick={() => setSelectedReference(booking.reference)}
+                                      onClick={() => { setSelectedReference(booking.reference); setSelectedWaitlistId(null); }}
                                       aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, pending table`}
                                     >
                                       <span>{formatLocalTime(booking.startsAt)}</span>
@@ -1206,6 +1385,19 @@ function OperatorPage() {
                     <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
                   </div>
                   {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
+                </section>
+              )}
+              {selectedWaitlistEntry && (
+                <section aria-labelledby="selected-waitlist-title" className="selected-party-panel waitlist-selected move-mode">
+                  <h2 id="selected-waitlist-title">Selected waitlist</h2>
+                  <strong>{selectedWaitlistEntry.guestLabel}</strong>
+                  <p>{formatLocalTime(selectedWaitlistEntry.startsAt)} · {selectedWaitlistEntry.partySize} guests · {selectedWaitlistEntry.section || 'either'} · {selectedWaitlistEntry.quotedWaitMinutes} min quote · {statusLabel(selectedWaitlistEntry.status)}</p>
+                  <div className="side-actions">
+                    <button disabled={busy || waitBusy || selectedWaitlistEntry.status === 'notified'} onClick={() => updateWaitlistStatus(selectedWaitlistEntry, 'notified')}>Notify</button>
+                    <button disabled={busy || waitBusy} onClick={() => startWaitlistSeating(selectedWaitlistEntry)}>Seat from floor</button>
+                    <button disabled={busy || waitBusy} onClick={() => updateWaitlistStatus(selectedWaitlistEntry, 'cancelled')}>Cancel</button>
+                  </div>
+                  <p className="move-hint">Tap an open highlighted table to seat this walk-in.</p>
                 </section>
               )}
               <section aria-labelledby="holds-title">

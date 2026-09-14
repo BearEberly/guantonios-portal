@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection } from './types';
+import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -53,12 +53,20 @@ export function cancelReservation(input: { reference: string; manageToken: strin
   return request<BookingResult>('/api/demo/cancel', input);
 }
 
-export function operatorList(token: string) {
-  return request<OperatorState>('/api/demo/operator/list', {}, token);
+export async function operatorList(token: string) {
+  const [state, waitlist] = await Promise.all([
+    request<OperatorState>('/api/demo/operator/list', {}, token),
+    request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token)
+  ]);
+  return { ...state, waitlist: waitlist.waitlist || [] };
 }
 
 export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
   return request<{ ok: boolean; reference: string; status: string; tableCode?: string; error?: string }>('/api/demo/operator/status', { reference, status, ...(tableCode ? { tableCode } : {}) }, token);
+}
+
+export function operatorWaitlist(token: string, input: { op: 'create'; guestLabel: string; contact?: string; date: string; time: string; partySize: number; section?: SeatingSection | 'either'; quotedWaitMinutes?: number; note?: string } | { op: 'status'; waitlistId: string; status: 'waiting' | 'notified' | 'cancelled' } | { op: 'seat'; waitlistId: string; tableCode: string }) {
+  return request<{ ok: boolean; waitlistId?: string; reference?: string; status?: string; tableCode?: string; entry?: WaitlistEntry; error?: string }>('/api/demo/operator/waitlist', input, token);
 }
 
 export function operatorReset(token: string) {

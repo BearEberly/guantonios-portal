@@ -111,6 +111,37 @@ test('operator can use Move table mode as a touch fallback', async ({ page, requ
 });
 
 
+test('operator can add, notify, and seat a walk-in from the Wait rail', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Wait$/i }).click();
+  await expect(page.getByLabel('Add walk-in waitlist party')).toBeVisible();
+  await page.getByLabel('Waitlist guest name').fill('Walk In Test');
+  await page.getByLabel('Waitlist requested time').fill('19:30');
+  await page.getByLabel('Waitlist party size').selectOption('2');
+  await page.getByLabel('Waitlist seating preference').selectOption('either');
+  await page.getByLabel('Quoted wait minutes').fill('20');
+  await page.getByLabel('Waitlist note').fill('Test walk-in for iPad waitlist.');
+  await page.getByRole('button', { name: /add to waitlist/i }).click();
+
+  const waitRow = page.locator('.waitlist-row').filter({ hasText: 'Walk In Test' });
+  await expect(page.getByText(/Added Walk In Test to the waitlist for 2/i)).toBeVisible();
+  await expect(waitRow).toBeVisible();
+  await expect(waitRow).toContainText(/20 min quote/i);
+  await waitRow.getByRole('button', { name: /^Notify$/i }).click();
+  await expect(waitRow).toContainText(/Notified/i);
+  await waitRow.getByRole('button', { name: /seat from floor/i }).click();
+  await expect(page.getByText(/Seat Walk In Test by tapping an open compatible table/i)).toBeVisible();
+  await page.getByRole('button', { name: /Table P1, 2 seats, open, drop Walk In Test here/i }).click();
+
+  await expect(page.getByText(/Seated waitlist party DEMO-[A-Z0-9]+ at table P1/i)).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+});
+
 test('operator can create and seat a booking from the iPad Book rail', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
