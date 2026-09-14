@@ -418,6 +418,7 @@ function ManagePage() {
 }
 
 type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Reports';
+type OperatorMode = 'floor' | 'timeline' | 'availability' | 'reports';
 
 function OperatorPage() {
   const [token, setToken] = useState(sessionStorage.getItem('demoOperatorToken') || '');
@@ -427,7 +428,7 @@ function OperatorPage() {
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
   const [movingReference, setMovingReference] = useState<string | null>(null);
   const [dragTargetTable, setDragTargetTable] = useState<string | null>(null);
-  const [operatorMode, setOperatorMode] = useState<'floor' | 'timeline' | 'availability'>('floor');
+  const [operatorMode, setOperatorMode] = useState<OperatorMode>('floor');
   const [floorAction, setFloorAction] = useState<'seat' | 'block' | 'combine'>('seat');
   const [tableBlockReason, setTableBlockReason] = useState('Blocked from the iPad floor.');
   const [blockBusy, setBlockBusy] = useState(false);
@@ -468,8 +469,22 @@ function OperatorPage() {
     event?.preventDefault();
     setBusy(true);
     try {
-      const result = await operatorList(token);
-      if (!result.ok) throw new Error(result.error || 'Unauthorized');
+      let result: OperatorState | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const next = await operatorList(token);
+          if (!next.ok) throw new Error(next.error || 'Unauthorized');
+          result = next;
+          break;
+        } catch (error) {
+          lastError = error;
+          const message = error instanceof Error ? error.message.toLowerCase() : '';
+          if (!message.includes('deadlock') && !message.includes('timeout')) throw error;
+          await new Promise(resolve => window.setTimeout(resolve, 160 * (attempt + 1)));
+        }
+      }
+      if (!result) throw lastError instanceof Error ? lastError : new Error('Operator data unavailable');
       sessionStorage.setItem('demoOperatorToken', token);
       setState(result);
       setStatus(loadedStatus);
@@ -687,9 +702,12 @@ function OperatorPage() {
   const bookedCount = bookings.filter(booking => booking.status === 'confirmed').length;
   const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
   const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
+  const completedCount = bookings.filter(booking => booking.status === 'completed').length;
+  const cancelledCount = bookings.filter(booking => booking.status === 'cancelled').length;
   const previewCount = notifications.length;
   const openWaitlist = waitlist.filter(entry => ['waiting', 'notified'].includes(entry.status));
   const waitlistCount = openWaitlist.length;
+  const reportAttentionCount = bookedCount + checkInCount + waitlistCount + tableBlocks.length;
   const explicitSelectedBooking = selectedReference ? bookings.find(booking => booking.reference === selectedReference) || null : null;
   const selectedWaitlistEntry = selectedWaitlistId ? waitlist.find(entry => entry.id === selectedWaitlistId) || null : null;
   const selectedBooking = selectedWaitlistEntry ? null : explicitSelectedBooking || activeBookings[0] || bookings[0] || null;
@@ -787,18 +805,47 @@ function OperatorPage() {
     { label: 'Waitlist', count: waitlistCount },
     { label: 'Booked', count: bookedCount },
     { label: 'Seated', count: seatedCount },
-    { label: 'Done', count: bookings.filter(booking => booking.status === 'completed').length },
-    { label: 'No-show', count: bookings.filter(booking => booking.status === 'cancelled').length }
+    { label: 'Done', count: completedCount },
+    { label: 'No-show', count: cancelledCount }
   ];
   const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
   const timeSlotKeys = timeSlots.map((_, index) => `${String(17 + Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`);
   const timelineGridTemplate = `96px repeat(${timeSlots.length}, minmax(76px, 1fr))`;
+  const nonCancelledBookings = bookings.filter(booking => booking.status !== 'cancelled');
+  const reportCovers = nonCancelledBookings.reduce((total, booking) => total + booking.partySize, 0);
+  const completedCovers = bookings.filter(booking => booking.status === 'completed').reduce((total, booking) => total + booking.partySize, 0);
+  const cancelledCovers = bookings.filter(booking => booking.status === 'cancelled').reduce((total, booking) => total + booking.partySize, 0);
+  const averagePartySize = nonCancelledBookings.length ? (reportCovers / nonCancelledBookings.length).toFixed(1) : '0.0';
+  const statusCoverReport = [
+    { label: 'Booked', parties: bookings.filter(booking => booking.status === 'confirmed').length, covers: bookings.filter(booking => booking.status === 'confirmed').reduce((total, booking) => total + booking.partySize, 0) },
+    { label: 'Checked in', parties: bookings.filter(booking => booking.status === 'checked_in').length, covers: bookings.filter(booking => booking.status === 'checked_in').reduce((total, booking) => total + booking.partySize, 0) },
+    { label: 'Seated', parties: bookings.filter(booking => booking.status === 'seated').length, covers: bookings.filter(booking => booking.status === 'seated').reduce((total, booking) => total + booking.partySize, 0) },
+    { label: 'Finished', parties: bookings.filter(booking => booking.status === 'completed').length, covers: completedCovers },
+    { label: 'Cancelled', parties: bookings.filter(booking => booking.status === 'cancelled').length, covers: cancelledCovers }
+  ];
+  const sectionCoverReport = (['indoor', 'outdoor'] as SeatingSection[]).map(section => {
+    const sectionBookings = nonCancelledBookings.filter(booking => booking.section === section);
+    return {
+      section,
+      label: section === 'indoor' ? 'Dining room' : 'Patio',
+      parties: sectionBookings.length,
+      covers: sectionBookings.reduce((total, booking) => total + booking.partySize, 0)
+    };
+  });
+  const reportOccupiedTableCodes = new Set(Array.from(bookingsByTable.keys()));
+  const reportTotalSeats = floorTables.reduce((total, table) => total + table.seats, 0);
+  const reportOccupiedSeats = floorTables.filter(table => reportOccupiedTableCodes.has(table.code)).reduce((total, table) => total + table.seats, 0);
+  const reportBlockedTables = tableBlocks.filter(block => block.status === 'active').length;
+  const reportOpenTables = Math.max(0, floorTables.length - reportOccupiedTableCodes.size - reportBlockedTables);
+  const reportUtilization = reportTotalSeats ? Math.round((reportOccupiedSeats / reportTotalSeats) * 100) : 0;
+  const averageWaitQuote = openWaitlist.length ? Math.round(openWaitlist.reduce((total, entry) => total + entry.quotedWaitMinutes, 0) / openWaitlist.length) : 0;
+  const notifiedWaitlist = openWaitlist.filter(entry => entry.status === 'notified').length;
   const railItems: Array<{ icon: string; label: OperatorRailSection; count: number }> = [
     { icon: 'book', label: 'Book', count: bookedCount },
     { icon: 'floor', label: 'Floor', count: activeBookings.length + tableBlocks.length + tableCombinations.length },
     { icon: 'wait', label: 'Wait', count: waitlistCount },
     { icon: 'guest', label: 'Guests', count: profiles.length },
-    { icon: 'reports', label: 'Reports', count: previewCount }
+    { icon: 'reports', label: 'Reports', count: reportAttentionCount || reportCovers }
   ];
   const sectionNames = ['Dining Room', 'Patio'];
   const timelineBookings = [...visibleBookings].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -829,14 +876,32 @@ function OperatorPage() {
       .reduce((total, booking) => total + booking.partySize, 0);
     return { slot: timeSlots[index], covers };
   });
+  const servicePacingLimit = 10;
   const capacityBySlot = timeSlots.map((slot, index) => {
     const slotTime = timeSlotKeys[index];
     const covers = bookings
       .filter(booking => !['cancelled', 'completed'].includes(booking.status))
       .filter(booking => timelineLocalKey(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
-    return { slot, time: slotTime, covers, remaining: Math.max(0, 10 - covers) };
+    return { slot, time: slotTime, covers, remaining: Math.max(0, servicePacingLimit - covers) };
   });
+  const reportPacingRows = timeSlots.map((slot, index) => {
+    const slotData = capacityBySlot[index];
+    const state = slotData.covers >= 10 ? 'full' : slotData.covers >= 8 ? 'tight' : slotData.covers > 0 ? 'paced' : 'open';
+    return { ...slotData, slot, state, fill: Math.min(100, Math.round((slotData.covers / 10) * 100)) };
+  });
+  const busiestSlot = reportPacingRows.reduce((best, slot) => slot.covers > best.covers ? slot : best, reportPacingRows[0] || { slot: '5:00', covers: 0, remaining: 10, state: 'open', fill: 0, time: '17:00' });
+  const pacingAlert = busiestSlot.covers >= 10
+    ? `${busiestSlot.slot} is full.`
+    : busiestSlot.covers >= 8
+      ? `${busiestSlot.slot} is tight with ${busiestSlot.remaining} covers left.`
+      : reportCovers > 0
+        ? `${busiestSlot.slot} is the busiest slot.`
+        : 'No covers are booked yet.';
+  const nextTableTurns = activeBookings
+    .filter(booking => booking.tableCode)
+    .sort((a, b) => a.endsAt.localeCompare(b.endsAt))
+    .slice(0, 5);
   const timelineGridColumn = (booking: ReservationSummary & { tableCode?: string }) => {
     const startsAt = timelineLocalKey(booking.startsAt);
     const startIndex = Math.max(0, timeSlotKeys.indexOf(startsAt));
@@ -864,7 +929,9 @@ function OperatorPage() {
       if (!activeGuestProfile && profiles[0]) selectGuestProfile(profiles[0]);
       return;
     }
-    setQueueFilter('Notify');
+    setOperatorMode('reports');
+    setQueueFilter('All');
+    setSelectedWaitlistId(null);
   }
   function selectReservation(reference: string) {
     setSelectedReference(reference);
@@ -1212,9 +1279,22 @@ function OperatorPage() {
                 <button type="button" aria-label="Next service">›</button>
               </div>
               <div className="resyos-mode-controls" aria-label="View controls">
-                {(['floor', 'timeline', 'availability'] as const).map(mode => (
-                  <button type="button" key={mode} className={operatorMode === mode ? 'active' : ''} aria-pressed={operatorMode === mode} onClick={() => setOperatorMode(mode)}>
-                    {mode === 'floor' ? 'Floor' : mode === 'timeline' ? 'Timeline' : 'Availability'}
+                {(['floor', 'timeline', 'availability', 'reports'] as const).map(mode => (
+                  <button
+                    type="button"
+                    key={mode}
+                    className={operatorMode === mode ? 'active' : ''}
+                    aria-pressed={operatorMode === mode}
+                    onClick={() => {
+                      if (mode === 'reports') {
+                        selectOperatorRail('Reports');
+                        return;
+                      }
+                      setOperatorMode(mode);
+                      if (activeRail === 'Reports') setActiveRail('Floor');
+                    }}
+                  >
+                    {mode === 'floor' ? 'Floor' : mode === 'timeline' ? 'Timeline' : mode === 'availability' ? 'Availability' : 'Reports'}
                   </button>
                 ))}
               </div>
@@ -1248,7 +1328,7 @@ function OperatorPage() {
             </section>
             <section className="resyos-workbench">
               <aside className="resyos-left-rail" aria-label="Guest queues">
-              {activeRail !== 'Book' && (
+              {activeRail !== 'Book' && activeRail !== 'Reports' && (
                 <>
                   <label className="queue-search">
                     <span className="sr-only">Search guest or reference</span>
@@ -1328,6 +1408,36 @@ function OperatorPage() {
                     </article>
                   ))}
                 </div>
+              </div>
+              ) : activeRail === 'Reports' ? (
+              <div className="reports-summary-panel" aria-label="Reports summary">
+                <div className="section-heading">
+                  <div>
+                    <h2>Reports</h2>
+                    <p>Live cover report, pacing, waitlist, and table-turn readout.</p>
+                  </div>
+                </div>
+                <article className="report-mini-card primary">
+                  <span>Total covers</span>
+                  <strong>{reportCovers}</strong>
+                  <small>{nonCancelledBookings.length} parties · avg {averagePartySize}</small>
+                </article>
+                <article className="report-mini-card">
+                  <span>Pacing alert</span>
+                  <strong>{busiestSlot.slot}</strong>
+                  <small>{pacingAlert}</small>
+                </article>
+                <article className="report-mini-card">
+                  <span>Table utilization</span>
+                  <strong>{reportUtilization}%</strong>
+                  <small>{reportOccupiedTableCodes.size} occupied · {reportOpenTables} open · {reportBlockedTables} blocked</small>
+                </article>
+                <article className="report-mini-card">
+                  <span>Waitlist health</span>
+                  <strong>{waitlistCount}</strong>
+                  <small>{notifiedWaitlist} notified · {averageWaitQuote || 0} min avg quote</small>
+                </article>
+                <button type="button" className="report-open-button" onClick={() => setOperatorMode('reports')}>Open daily report</button>
               </div>
               ) : (
               <div className="operator-list">
@@ -1473,8 +1583,8 @@ function OperatorPage() {
                   </span>
                 ))}
               </div>
-              <div className={`floor-plan-panel mode-${operatorMode}`}>
-                {operatorMode === 'floor' && (
+              <div className={`floor-plan-panel mode-${activeRail === 'Reports' ? 'reports' : operatorMode}`}>
+                {activeRail !== 'Reports' && operatorMode === 'floor' && (
                   <>
                     {sectionNames.map(sectionName => (
                       <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
@@ -1490,12 +1600,12 @@ function OperatorPage() {
                             const booking = bookingsByTable.get(table.code);
                             const tableBlock = tableBlocksByTable.get(table.code);
                             const tileStatus = booking ? booking.status : tableBlock ? 'blocked' : 'open';
-                            const assignable = !booking && !tableBlock && canSeatAtTable(table);
+                            const assignable = floorAction === 'seat' && !booking && !tableBlock && canSeatAtTable(table);
                             const blockable = !booking && !tableBlock && floorAction === 'block';
                             const dropReady = assignable && Boolean(activeSeatCandidate);
                             const dragOver = dragTargetTable === table.code;
                             const comboMember = floorAction === 'combine' && tableCombinations.some(combo => combo.tableCodes.includes(table.code));
-                            const tooSmall = !booking && !tableBlock && Boolean(activeSeatCandidate && activeSeatCandidate.partySize > table.seats);
+                            const tooSmall = floorAction === 'seat' && !booking && !tableBlock && Boolean(activeSeatCandidate && activeSeatCandidate.partySize > table.seats);
                             return (
                               <button
                                 type="button"
@@ -1533,7 +1643,7 @@ function OperatorPage() {
                     )}
                   </>
                 )}
-                {operatorMode === 'timeline' && (
+                {activeRail !== 'Reports' && operatorMode === 'timeline' && (
                   <section className="operator-timeline-board" aria-label="Reservation timeline board">
                     <div className="timeline-board-head">
                       <h2>Timeline</h2>
@@ -1639,7 +1749,7 @@ function OperatorPage() {
                     )}
                   </section>
                 )}
-                {operatorMode === 'availability' && (
+                {activeRail !== 'Reports' && operatorMode === 'availability' && (
                   <section className="availability-board" aria-label="Availability by service time">
                     <div className="timeline-board-head">
                       <h2>Availability</h2>
@@ -1657,6 +1767,95 @@ function OperatorPage() {
                     </div>
                   </section>
                 )}
+                {operatorMode === 'reports' && (
+                  <section className="service-report-board" aria-label="Daily cover report">
+                    <div className="timeline-board-head">
+                      <h2>Live service report</h2>
+                      <span>{new Date(serviceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · Dinner</span>
+                    </div>
+                    <div className="report-hero-grid">
+                      <article>
+                        <span>Total covers</span>
+                        <strong>{reportCovers}</strong>
+                        <small>{nonCancelledBookings.length} booked parties</small>
+                      </article>
+                      <article>
+                        <span>Active covers</span>
+                        <strong>{activeCount}</strong>
+                        <small>{seatedCount} seated · {checkInCount} checked in</small>
+                      </article>
+                      <article>
+                        <span>Avg party</span>
+                        <strong>{averagePartySize}</strong>
+                        <small>{cancelledCovers} cancelled covers</small>
+                      </article>
+                      <article>
+                        <span>Utilization</span>
+                        <strong>{reportUtilization}%</strong>
+                        <small>{reportOccupiedSeats}/{reportTotalSeats} seats assigned</small>
+                      </article>
+                    </div>
+                    <div className="report-columns">
+                      <section className="report-panel" aria-label="Cover pacing report">
+                        <div className="report-panel-head">
+                          <h3>Cover pacing</h3>
+                          <span>{pacingAlert}</span>
+                        </div>
+                        <div className="pacing-list">
+                          {reportPacingRows.map(row => (
+                            <article key={row.slot} className={`pacing-row ${row.state}`}>
+                              <div>
+                                <strong>{row.slot}</strong>
+                                <span>{row.covers}/10 covers · {row.remaining} open</span>
+                              </div>
+                              <i aria-hidden="true"><b style={{ width: `${row.fill}%` }} /></i>
+                              <em>{row.state === 'full' ? 'Full' : row.state === 'tight' ? 'Tight' : row.state === 'paced' ? 'Paced' : 'Open'}</em>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                      <section className="report-panel" aria-label="Live floor status report">
+                        <div className="report-panel-head">
+                          <h3>Live floor status</h3>
+                          <span>{reportOpenTables} open tables</span>
+                        </div>
+                        <div className="status-report-grid">
+                          {statusCoverReport.map(row => (
+                            <article key={row.label}>
+                              <span>{row.label}</span>
+                              <strong>{row.covers}</strong>
+                              <small>{row.parties} parties</small>
+                            </article>
+                          ))}
+                        </div>
+                        <div className="section-report-list" aria-label="Section cover report">
+                          {sectionCoverReport.map(row => (
+                            <article key={row.section}>
+                              <strong>{row.label}</strong>
+                              <span>{row.covers} covers · {row.parties} parties</span>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                    <section className="report-panel table-turn-panel" aria-label="Table turns report">
+                      <div className="report-panel-head">
+                        <h3>Table turns</h3>
+                        <span>{nextTableTurns.length} active assigned parties</span>
+                      </div>
+                      {nextTableTurns.length === 0 ? <p>No assigned table turns yet.</p> : nextTableTurns.map(booking => (
+                        <article key={booking.reference} className="turn-row">
+                          <div>
+                            <strong>{booking.tableCode || 'Pending'}</strong>
+                            <span>{booking.guestLabel || 'Demo Guest'} · {booking.reference} · {booking.partySize} guests</span>
+                          </div>
+                          <em>{statusLabel(booking.status)}</em>
+                          <span>{formatLocalTime(booking.startsAt)} to {formatLocalTime(booking.endsAt)}</span>
+                        </article>
+                      ))}
+                    </section>
+                  </section>
+                )}
               </div>
               <footer className="cover-ticker" aria-label="Dine-in cover pacing">
                 <strong>{activeCount} DINE-IN COVERS</strong>
@@ -1664,6 +1863,17 @@ function OperatorPage() {
               </footer>
             </section>
             <aside className="floor-panel resyos-side-panel" tabIndex={0} aria-label="Service details">
+              {activeRail === 'Reports' && (
+                <section className="report-side-card" aria-label="Report insights">
+                  <h2>Report insights</h2>
+                  <p>{pacingAlert}</p>
+                  <div>
+                    <span>{reportCovers} covers</span>
+                    <span>{reportUtilization}% seats assigned</span>
+                    <span>{waitlistCount} waiting</span>
+                  </div>
+                </section>
+              )}
               <section aria-labelledby="floor-title">
                 <h2 id="floor-title">Floor snapshot</h2>
                 <p>Spatial map mirrors the service queue: booked, checked in, seated, finished, cancelled, open, or blocked.</p>

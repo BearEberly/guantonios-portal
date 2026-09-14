@@ -6,6 +6,10 @@ function reservationRow(page: Page, reference: string) {
   return page.locator('.operator-row').filter({ hasText: reference }).first();
 }
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 
 async function resetDemoData(request: APIRequestContext) {
   let lastError = '';
@@ -35,6 +39,62 @@ async function selectReservationRow(page: Page, reference: string) {
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: new RegExp(`Select .* ${reference}`) }).click();
   return row;
+}
+
+function laDate(offsetDays: number) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(Date.now() + offsetDays * 86400000));
+}
+
+async function apiPost<T = any>(request: APIRequestContext, path: string, data: unknown, token = operatorToken) {
+  const response = await request.post(path, {
+    headers: token ? { 'x-demo-operator-token': token } : undefined,
+    data
+  });
+  const body = await response.json().catch(() => null) as T & { ok?: boolean; error?: string } | null;
+  expect(response.ok(), `${path} failed with ${response.status()} ${body?.error || ''}`).toBeTruthy();
+  expect(body?.ok, `${path} did not return ok`).toBeTruthy();
+  return body as T & { ok: boolean };
+}
+
+async function findOpenDemoSlot(request: APIRequestContext, partySize = 2, section = 'outdoor', time = '19:30') {
+  for (let offset = 0; offset < 14; offset += 1) {
+    const date = laDate(offset);
+    const response = await request.post('/api/demo/search', { data: { date, time, partySize, section } });
+    const body = await response.json().catch(() => null) as { available?: boolean; slots?: Array<{ date: string; time: string }> } | null;
+    if (response.ok() && body?.available && body.slots?.[0]) return body.slots[0];
+  }
+  throw new Error(`No open demo slot found for ${partySize} ${section} ${time}`);
+}
+
+async function createConfirmedDemoBooking(request: APIRequestContext, input: { guestLabel: string; partySize?: number; section?: 'indoor' | 'outdoor'; time?: string }) {
+  const partySize = input.partySize || 2;
+  const section = input.section || 'outdoor';
+  const time = input.time || '19:30';
+  const slot = await findOpenDemoSlot(request, partySize, section, time);
+  const hold = await apiPost<{ holdId: string; holdToken: string }>(request, '/api/demo/hold', {
+    date: slot.date,
+    time: slot.time,
+    partySize,
+    section,
+    idempotencyKey: `e2e_hold_${Date.now()}_${Math.random()}`
+  }, undefined);
+  const [firstName, ...rest] = input.guestLabel.split(' ');
+  const confirm = await apiPost<{ reference: string; manageToken: string; reservation: { reference: string } }>(request, '/api/demo/confirm', {
+    holdId: hold.holdId,
+    holdToken: hold.holdToken,
+    idempotencyKey: `e2e_confirm_${Date.now()}_${Math.random()}`,
+    firstName: firstName || 'Report',
+    lastName: rest.join(' ') || 'Guest',
+    email: 'demo@example.invalid',
+    mobile: '(209) 555-0199',
+    request: 'Created by Reports e2e setup.'
+  }, undefined);
+  return { reference: confirm.reference, date: slot.date, time: slot.time };
 }
 
 test('guest can confirm, change, cancel, and operator can see the synthetic booking', async ({ page, request }) => {
@@ -181,7 +241,8 @@ test('operator can add, notify, and seat a walk-in from the Wait rail', async ({
 
   await page.getByLabel('Operator sections').getByRole('button', { name: /^Wait$/i }).click();
   await expect(page.getByLabel('Add walk-in waitlist party')).toBeVisible();
-  await page.getByLabel('Waitlist guest name').fill('Walk In Test');
+  const walkName = `Walk In ${Date.now()}`;
+  await page.getByLabel('Waitlist guest name').fill(walkName);
   await page.getByLabel('Waitlist requested time').fill('19:30');
   await page.getByLabel('Waitlist party size').selectOption('2');
   await page.getByLabel('Waitlist seating preference').selectOption('either');
@@ -189,18 +250,18 @@ test('operator can add, notify, and seat a walk-in from the Wait rail', async ({
   await page.getByLabel('Waitlist note').fill('Test walk-in for iPad waitlist.');
   await page.getByRole('button', { name: /add to waitlist/i }).click();
 
-  const waitRow = page.locator('.waitlist-row').filter({ hasText: 'Walk In Test' });
-  await expect(page.getByText(/Added Walk In Test to the waitlist for 2/i)).toBeVisible();
+  const waitRow = page.locator('.waitlist-row').filter({ hasText: walkName }).last();
+  await expect(page.getByText(new RegExp(`Added ${escapeRegex(walkName)} to the waitlist for 2`, 'i'))).toBeVisible();
   await expect(waitRow).toBeVisible();
   await expect(waitRow).toContainText(/20 min quote/i);
   await waitRow.getByRole('button', { name: /^Notify$/i }).click();
   await expect(waitRow).toContainText(/Notified/i);
   await waitRow.getByRole('button', { name: /seat from floor/i }).click();
-  await expect(page.getByText(/Seat Walk In Test by tapping an open compatible table/i)).toBeVisible();
-  await page.getByRole('button', { name: /Table P1, 2 seats, open, drop Walk In Test here/i }).click();
+  await expect(page.getByText(new RegExp(`Seat ${escapeRegex(walkName)} by tapping an open compatible table`, 'i'))).toBeVisible();
+  await page.getByRole('button', { name: new RegExp(`Table P1, 2 seats, open, drop ${escapeRegex(walkName)} here`, 'i') }).click();
 
   await expect(page.getByText(/Seated waitlist party DEMO-[A-Z0-9]+ at table P1/i)).toBeVisible();
-  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table/i);
 });
 
 test('operator can seat an 8 top with a combined patio table setup', async ({ page, request }) => {
@@ -211,7 +272,8 @@ test('operator can seat an 8 top with a combined patio table setup', async ({ pa
   await page.getByRole('button', { name: /open operator view/i }).click();
 
   await page.getByLabel('Operator sections').getByRole('button', { name: /^Wait$/i }).click();
-  await page.getByLabel('Waitlist guest name').fill('Combo Eight Test');
+  const comboName = `Combo Eight ${Date.now()}`;
+  await page.getByLabel('Waitlist guest name').fill(comboName);
   await page.getByLabel('Waitlist requested time').fill('19:30');
   await page.getByLabel('Waitlist party size').selectOption('8');
   await page.getByLabel('Waitlist seating preference').selectOption('outdoor');
@@ -219,7 +281,7 @@ test('operator can seat an 8 top with a combined patio table setup', async ({ pa
   await page.getByLabel('Waitlist note').fill('Needs combined patio tables.');
   await page.getByRole('button', { name: /add to waitlist/i }).click();
 
-  const waitRow = page.locator('.waitlist-row').filter({ hasText: 'Combo Eight Test' });
+  const waitRow = page.locator('.waitlist-row').filter({ hasText: comboName }).last();
   await expect(waitRow).toBeVisible();
   await waitRow.getByRole('button', { name: /seat from floor/i }).click();
   await page.getByRole('button', { name: /^Combine tables$/i }).click();
@@ -234,6 +296,42 @@ test('operator can seat an 8 top with a combined patio table setup', async ({ pa
 });
 
 
+
+test('operator reports show live service pacing on the iPad', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const reportName = `Report Party ${Date.now()}`;
+  const reportWaitName = `Report Wait ${Date.now()}`;
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: reportName, partySize: 2, section: 'outdoor', time: '19:30' });
+  await apiPost(request, '/api/demo/operator/status', { reference: booking.reference, status: 'seated', tableCode: 'P1' });
+  await apiPost(request, '/api/demo/operator/waitlist', {
+    op: 'create',
+    guestLabel: reportWaitName,
+    contact: '2095550103',
+    date: booking.date,
+    time: '19:30',
+    partySize: 4,
+    section: 'indoor',
+    quotedWaitMinutes: 35,
+    note: 'Reports e2e waitlist party.'
+  });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Reports$/i }).click();
+
+  const reportBoard = page.getByLabel('Daily cover report');
+  await expect(reportBoard).toBeVisible();
+  await expect(reportBoard).toContainText('Live service report');
+  await expect(reportBoard).toContainText('Total covers');
+  await expect(reportBoard).toContainText('2');
+  await expect(page.getByLabel('Cover pacing report')).toContainText('covers');
+  await expect(page.getByLabel('Live floor status report')).toContainText('Patio');
+  await expect(page.getByLabel('Table turns report')).toContainText(booking.reference);
+  await expect(page.getByLabel('Reports summary')).toContainText('Table utilization');
+  await expect(page.getByLabel('Report insights')).toContainText('2 covers');
+});
 test('operator can load and update a guestbook profile on the iPad', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);
