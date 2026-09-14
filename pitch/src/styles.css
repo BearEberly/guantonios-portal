@@ -3707,6 +3707,94 @@ button.timeline-cell:hover,
   margin-top: 10px;
 }
 
+
+.operator-tags span.arrival-chip,
+.profile-chip-row span.arrival-chip {
+  color: #101820;
+  background: #d9e7ef;
+}
+
+.operator-tags span.arrival-late,
+.profile-chip-row span.arrival-late,
+.service-stage-report article.arrival-late {
+  border-color: rgba(207, 75, 72, .45);
+  background: #ffd7d7;
+  color: #521414;
+}
+
+.operator-tags span.arrival-due,
+.profile-chip-row span.arrival-due,
+.service-stage-report article.arrival-due {
+  border-color: rgba(242, 194, 97, .48);
+  background: #fff0c2;
+  color: #5d3d03;
+}
+
+.operator-tags span.arrival-arrived,
+.profile-chip-row span.arrival-arrived,
+.service-stage-report article.arrival-arrived {
+  border-color: rgba(69, 184, 232, .5);
+  background: #dff5ff;
+  color: #06435d;
+}
+
+.operator-tags span.arrival-seated,
+.profile-chip-row span.arrival-seated,
+.service-stage-report article.arrival-seated {
+  border-color: rgba(255, 149, 54, .5);
+  background: #ffe1bf;
+  color: #4d2405;
+}
+
+.operator-tags span.arrival-early,
+.profile-chip-row span.arrival-early {
+  background: #e7eef5;
+  color: #263746;
+}
+
+.operator-row.arrival-late {
+  border-color: rgba(207, 75, 72, .74);
+  box-shadow: inset 4px 0 0 #cf4b48, 0 0 0 2px rgba(207, 75, 72, .18);
+}
+
+.operator-row.arrival-due {
+  border-color: rgba(242, 194, 97, .72);
+  box-shadow: inset 4px 0 0 #f2c261, 0 0 0 2px rgba(242, 194, 97, .16);
+}
+
+.operator-row.arrival-arrived {
+  border-color: rgba(69, 184, 232, .72);
+  box-shadow: inset 4px 0 0 #45b8e8, 0 0 0 2px rgba(69, 184, 232, .16);
+}
+
+.floor-table.arrival-late,
+.timeline-reservation-card.arrival-late {
+  border-color: #cf4b48;
+  outline: 3px solid rgba(207, 75, 72, .32);
+}
+
+.floor-table.arrival-due,
+.timeline-reservation-card.arrival-due {
+  border-color: #f2c261;
+  outline: 3px solid rgba(242, 194, 97, .28);
+}
+
+.floor-table.arrival-arrived,
+.timeline-reservation-card.arrival-arrived {
+  border-color: #45b8e8;
+  outline: 3px solid rgba(69, 184, 232, .24);
+}
+
+.timeline-reservation-card.arrival-late span,
+.timeline-reservation-card.arrival-due span,
+.timeline-reservation-card.arrival-arrived span {
+  color: #27313b;
+}
+
+.arrival-state-report article {
+  border-style: solid;
+}
+
 .service-stage-report article {
   padding: 9px;
   border: 1px solid #2f3b45;

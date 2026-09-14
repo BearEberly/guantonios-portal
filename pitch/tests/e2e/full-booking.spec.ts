@@ -134,7 +134,7 @@ async function createConfirmedDemoBooking(request: APIRequestContext, input: { g
     mobile: '(209) 555-0199',
     request: 'Created by Reports e2e setup.'
   }, undefined);
-  return { reference: confirm.reference, date: slot.date, time: slot.time };
+  return { reference: confirm.reference, date: slot.date, time: slot.time, startsAt: slot.startsAt, endsAt: slot.endsAt };
 }
 
 test('guest can confirm, change, cancel, and operator can see the synthetic booking', async ({ page, request }) => {
@@ -265,7 +265,8 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
   await chooseOperatorServiceDate(page, serviceDate);
-  await selectReservationRow(page, reference);
+  const selectedRow = await selectReservationRow(page, reference);
+  await expect(selectedRow).toContainText(/Due now|Early|Late/);
   const patioTable = page.getByRole('button', { name: /Table P2, 2 seats/i });
   await expect(patioTable).toBeVisible();
   await patioTable.click();
@@ -277,6 +278,31 @@ test('operator can seat a selected party by tapping an open floor table', async 
 });
 
 
+
+
+test('operator arrival timing follows the service clock instead of the floor snapshot time', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Late Arrival ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+  await page.clock.setFixedTime(new Date(new Date(booking.startsAt).getTime() + 12 * 60 * 1000));
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, booking.date);
+  const row = await selectReservationRow(page, booking.reference);
+  await expect(row).toContainText('Late');
+  await expect(row).toContainText('12 min late');
+  await expect(page.locator('.selected-party-panel')).toContainText('Late');
+  await page.getByLabel('Floor snapshot time').selectOption('17:00');
+  await expect(row).toContainText('Late');
+  await expect(row).toContainText('12 min late');
+  await page.getByLabel('Floor snapshot time').selectOption('20:30');
+  await expect(row).toContainText('Late');
+  await expect(row).toContainText('12 min late');
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Reports$/i }).click();
+  await expect(page.getByLabel('Arrival timing report')).toContainText('Late');
+});
 
 test('operator can edit selected reservation details from the iPad drawer', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
@@ -344,11 +370,17 @@ test('operator can advance seated service stage and see turn-risk reporting', as
   await expect(tableP2).toBeVisible();
   await expect(tableP2).toContainText('Stage Guest');
   await expect(tableP2).toContainText(/P2 · 2 · 7:30/);
+  await expect(tableP2.locator('em')).toContainText('Seated');
   await expect(tableP2.locator('em')).toContainText('Entrees');
+  const selectedParty = page.locator('.selected-party-panel');
+  await expect(selectedParty).toContainText('Arrival timing');
+  await expect(selectedParty).toContainText('Seated');
 
   await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  await expect(page.getByLabel('Reservation timeline board')).toContainText('Seated');
   await expect(page.getByLabel('Reservation timeline board')).toContainText('Entrees');
   await page.getByLabel('Operator sections').getByRole('button', { name: /^Reports$/i }).click();
+  await expect(page.getByLabel('Arrival timing report')).toContainText('Seated');
   await expect(page.getByLabel('Service-stage report')).toContainText('Entrees');
   await expect(page.getByLabel('Table turns report')).toContainText('Entrees');
 });
