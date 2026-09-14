@@ -7,6 +7,14 @@ const pages = {
   '/sms/terms': { title: 'SMS terms', label: 'Terms' },
 } as const;
 
+const smsUrls = {
+  program: 'https://res.beareberly.com/sms/',
+  reservations: 'https://res.beareberly.com/reservations/',
+  privacy: 'https://res.beareberly.com/sms/privacy/',
+  terms: 'https://res.beareberly.com/sms/terms/',
+  proof: 'https://res.beareberly.com/sms-consent-proof.png',
+} as const;
+
 type SmsPath = keyof typeof pages;
 
 export function SmsInfoPage({ path }: { path: SmsPath }) {
@@ -67,17 +75,17 @@ function Program() {
       <p><strong>Opt-in methods:</strong> website checkbox and tester-initiated text keyword. No one is enrolled by default, the checkbox is not preselected, and live texting remains disabled until carrier approval.</p>
       <div className="sms-consent-box" aria-label="SMS consent call to action">
         <p className="sms-consent-label">Website opt-in copy shown beside the phone-number field:</p>
-        <p>"I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See privacy and terms."</p>
+        <p>"I agree to receive automated text replies from the Bear Eberly Photos reservation demo about this requested table, including availability, confirmation, status, and cancellation messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for help. See {smsUrls.privacy} and {smsUrls.terms}."</p>
         <p className="sms-consent-label">Text this exact keyword to opt in after the operator confirms activation:</p>
         <p className="sms-keyword"><span>START</span> to <span>+1 (209) 709-4194</span></p>
-        <p>Review the <a href="/sms/privacy">SMS privacy notice</a> and <a href="/sms/terms">SMS terms</a> before using either opt-in method.</p>
+        <p>Review the SMS privacy notice at <a href="/sms/privacy">{smsUrls.privacy}</a> and SMS terms at <a href="/sms/terms">{smsUrls.terms}</a> before using either opt-in method.</p>
       </div>
       <ol>
-        <li>Website flow: tester opens <strong>https://res.beareberly.com/reservations</strong>, enters a requested reservation or Notify request, enters their mobile number, checks the consent box, and submits the request.</li>
-        <li>Keyword flow: tester opens <strong>https://res.beareberly.com/sms</strong>, reviews the disclosure, privacy notice, and terms, then sends <strong>START</strong> to <strong>+1 (209) 709-4194</strong> only if they choose to opt in.</li>
+        <li>Website flow: tester opens <strong>{smsUrls.reservations}</strong>, enters a requested reservation or Notify request, enters their mobile number, checks the consent box, and submits the request.</li>
+        <li>Keyword flow: tester opens <strong>{smsUrls.program}</strong>, reviews the disclosure, privacy notice, and terms, then sends <strong>START</strong> to <strong>+1 (209) 709-4194</strong> only if they choose to opt in.</li>
         <li>The first automated reply identifies Bear Eberly Photos, states that this is a synthetic reservation demo, includes message frequency and rate disclosures, and explains STOP and HELP.</li>
       </ol>
-      <p>Hosted screenshot for review: <a href="/sms-consent-proof.png">https://res.beareberly.com/sms-consent-proof.png</a>.</p>
+      <p>Hosted screenshot for review: <a href="/sms-consent-proof.png">{smsUrls.proof}</a>.</p>
     </section>
     <section aria-labelledby="sms-controls">
       <h2 id="sms-controls">Stop messages or get help</h2>
@@ -87,7 +95,7 @@ function Program() {
     <section aria-labelledby="sms-ai">
       <h2 id="sms-ai">An AI assistant, with demo limits</h2>
       <p>The assistant can misunderstand a message. Check the date, time, party size, and seating details before confirming an action. Its replies are for this software demonstration and are not a confirmation from the restaurant.</p>
-      <p>Use sample guest details. Do not send payment information, passwords, sensitive personal information, or emergencies. Review the <a href="/sms/privacy">SMS privacy notice</a> for how messages are processed and the <a href="/sms/terms">SMS terms</a> for participation details.</p>
+      <p>Use sample guest details. Do not send payment information, passwords, sensitive personal information, or emergencies. Review the SMS privacy notice at <a href="/sms/privacy">{smsUrls.privacy}</a> for how messages are processed and the SMS terms at <a href="/sms/terms">{smsUrls.terms}</a> for participation details.</p>
     </section>
   </>;
 }
@@ -148,7 +156,7 @@ function Terms() {
     </section>
     <section aria-labelledby="terms-privacy">
       <h2 id="terms-privacy">Privacy and updates</h2>
-      <p>The <a href="/sms/privacy">SMS privacy notice</a> describes message processing, service providers, and mobile consent. Material changes to the program will be reflected on these pages. A different messaging purpose requires its own consent.</p>
+      <p>The SMS privacy notice at <a href="/sms/privacy">{smsUrls.privacy}</a> describes message processing, service providers, and mobile consent. Material changes to the program will be reflected on these pages. A different messaging purpose requires its own consent.</p>
     </section>
   </>;
 }
