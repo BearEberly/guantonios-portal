@@ -617,6 +617,8 @@ function OperatorPage() {
     { label: 'No-show', count: bookings.filter(booking => booking.status === 'cancelled').length }
   ];
   const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
+  const timeSlotKeys = timeSlots.map((_, index) => `${String(17 + Math.floor(index / 2)).padStart(2, '0')}:${index % 2 === 0 ? '00' : '30'}`);
+  const timelineGridTemplate = `96px repeat(${timeSlots.length}, minmax(76px, 1fr))`;
   const railItems: Array<{ icon: string; label: OperatorRailSection; count: number }> = [
     { icon: 'book', label: 'Book', count: bookedCount },
     { icon: 'floor', label: 'Floor', count: activeBookings.length },
@@ -626,16 +628,48 @@ function OperatorPage() {
   ];
   const sectionNames = ['Dining Room', 'Patio'];
   const timelineBookings = [...visibleBookings].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const timelineTableCodes = new Set(floorTables.map(table => table.code));
+  const timelineBookingsByTable = new Map<string, typeof timelineBookings>();
+  timelineBookings.forEach(booking => {
+    const key = booking.tableCode && timelineTableCodes.has(booking.tableCode) ? booking.tableCode : `${booking.section}-unassigned`;
+    timelineBookingsByTable.set(key, [...(timelineBookingsByTable.get(key) || []), booking]);
+  });
+  const timelineLocalKey = (value: string) => new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'America/Los_Angeles'
+  }).format(new Date(value));
+  const timelineSectionGroups = sectionNames.map(sectionName => ({
+    sectionName,
+    tables: floorTables.filter(table => table.section === sectionName),
+    covers: timelineBookings
+      .filter(booking => sectionName === 'Patio' ? booking.section === 'outdoor' : booking.section === 'indoor')
+      .reduce((total, booking) => total + booking.partySize, 0)
+  }));
+  const timelineCoversBySlot = timeSlotKeys.map((slotTime, index) => {
+    const covers = timelineBookings
+      .filter(booking => !['cancelled', 'completed'].includes(booking.status))
+      .filter(booking => timelineLocalKey(booking.startsAt) === slotTime)
+      .reduce((total, booking) => total + booking.partySize, 0);
+    return { slot: timeSlots[index], covers };
+  });
   const capacityBySlot = timeSlots.map((slot, index) => {
-    const slotHour = 17 + Math.floor(index / 2);
-    const slotMinute = index % 2 === 0 ? '00' : '30';
-    const slotTime = `${String(slotHour).padStart(2, '0')}:${slotMinute}`;
+    const slotTime = timeSlotKeys[index];
     const covers = bookings
       .filter(booking => !['cancelled', 'completed'].includes(booking.status))
-      .filter(booking => new Date(booking.startsAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Los_Angeles' }) === slotTime)
+      .filter(booking => timelineLocalKey(booking.startsAt) === slotTime)
       .reduce((total, booking) => total + booking.partySize, 0);
     return { slot, time: slotTime, covers, remaining: Math.max(0, 10 - covers) };
   });
+  const timelineGridColumn = (booking: ReservationSummary & { tableCode?: string }) => {
+    const startsAt = timelineLocalKey(booking.startsAt);
+    const startIndex = Math.max(0, timeSlotKeys.indexOf(startsAt));
+    const durationMs = Math.max(30 * 60 * 1000, new Date(booking.endsAt).getTime() - new Date(booking.startsAt).getTime());
+    const durationSlots = Math.max(1, Math.round(durationMs / (30 * 60 * 1000)));
+    const span = Math.min(4, durationSlots, timeSlots.length - startIndex);
+    return `${startIndex + 2} / span ${span}`;
+  };
   function selectOperatorRail(label: OperatorRailSection) {
     setActiveRail(label);
     if (label === 'Book') return;
@@ -944,16 +978,99 @@ function OperatorPage() {
                   <section className="operator-timeline-board" aria-label="Reservation timeline board">
                     <div className="timeline-board-head">
                       <h2>Timeline</h2>
-                      <span>{timelineBookings.length} visible parties</span>
+                      <span>{timelineBookings.length} visible parties · 90 min turns</span>
                     </div>
                     {timelineBookings.length === 0 && <p>No parties match the current filters.</p>}
-                    {timelineBookings.map(booking => (
-                      <button type="button" key={booking.reference} className={`timeline-party ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`} onClick={() => setSelectedReference(booking.reference)}>
-                        <span>{formatLocalTime(booking.startsAt)}</span>
-                        <strong>{booking.guestLabel || 'Demo Guest'}</strong>
-                        <em>{booking.reference} · {booking.partySize} · table {booking.tableCode || 'pending'} · {statusLabel(booking.status)}</em>
-                      </button>
-                    ))}
+                    {timelineBookings.length > 0 && (
+                      <div className="timeline-grid-wrap">
+                        <div className="timeline-grid" aria-label="Table lane reservation book">
+                          <div className="timeline-grid-header" style={{ gridTemplateColumns: timelineGridTemplate }} role="row">
+                            <strong>Table</strong>
+                            {timeSlots.map((slot, index) => <span key={slot} className={index === 5 ? 'active' : ''}>{slot}</span>)}
+                          </div>
+                          {timelineSectionGroups.map(group => (
+                            <div key={group.sectionName} className="timeline-section-group">
+                              <div className="timeline-section-band">
+                                <strong>{group.sectionName}</strong>
+                                <span>{group.covers} covers</span>
+                              </div>
+                              {group.tables.map(table => {
+                                const rowBookings = timelineBookingsByTable.get(table.code) || [];
+                                const tableBooking = bookingsByTable.get(table.code);
+                                const rowCanSeat = !tableBooking && canSeatAtTable(table);
+                                return (
+                                  <div key={table.code} className={`timeline-table-row ${rowCanSeat ? 'assignable' : ''}`} style={{ gridTemplateColumns: timelineGridTemplate }} role="row">
+                                    <button type="button" className={`timeline-table-label ${rowCanSeat ? 'assignable' : ''}`} onClick={() => seatSelectedAtTable(table)} aria-label={`Timeline table ${table.code}, ${table.seats} seats`}>
+                                      <strong>{table.code}</strong>
+                                      <span>{table.seats}p</span>
+                                    </button>
+                                    {timeSlots.map((slot, index) => (
+                                      <button
+                                        type="button"
+                                        key={`${table.code}-${slot}`}
+                                        className="timeline-cell"
+                                        onClick={() => rowCanSeat ? seatSelectedAtTable(table) : seedOperatorBook(timeSlotKeys[index], table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats)}
+                                        aria-label={rowCanSeat ? `Seat ${selectedBooking?.reference} at table ${table.code} from ${slot}` : `Book table ${table.code} at ${slot}`}
+                                      />
+                                    ))}
+                                    {rowBookings.map(booking => (
+                                      <button
+                                        type="button"
+                                        key={booking.reference}
+                                        className={`timeline-reservation-card ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                        style={{ gridColumn: timelineGridColumn(booking) }}
+                                        onClick={() => setSelectedReference(booking.reference)}
+                                        aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, table ${booking.tableCode || 'pending'}`}
+                                      >
+                                        <span>{formatLocalTime(booking.startsAt)}</span>
+                                        <strong>{booking.guestLabel || 'Demo Guest'}</strong>
+                                        <em>{booking.reference} · {booking.partySize} · {statusLabel(booking.status)}</em>
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                          {(['indoor', 'outdoor'] as SeatingSection[]).map(section => {
+                            const rowBookings = timelineBookingsByTable.get(`${section}-unassigned`) || [];
+                            if (rowBookings.length === 0) return null;
+                            return (
+                              <div key={`${section}-pending`} className="timeline-section-group">
+                                <div className="timeline-section-band pending">
+                                  <strong>{section === 'indoor' ? 'Indoor pending table' : 'Outdoor pending table'}</strong>
+                                  <span>{rowBookings.length} parties</span>
+                                </div>
+                                {rowBookings.map(booking => (
+                                  <div key={booking.reference} className="timeline-table-row pending-row" style={{ gridTemplateColumns: timelineGridTemplate }} role="row">
+                                    <div className="timeline-table-label">
+                                      <strong>Open</strong>
+                                      <span>{booking.section}</span>
+                                    </div>
+                                    {timeSlots.map(slot => <span key={`${booking.reference}-${slot}`} className="timeline-cell" aria-hidden="true" />)}
+                                    <button
+                                      type="button"
+                                      className={`timeline-reservation-card ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                      style={{ gridColumn: timelineGridColumn(booking) }}
+                                      onClick={() => setSelectedReference(booking.reference)}
+                                      aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, pending table`}
+                                    >
+                                      <span>{formatLocalTime(booking.startsAt)}</span>
+                                      <strong>{booking.guestLabel || 'Demo Guest'}</strong>
+                                      <em>{booking.reference} · {booking.partySize} · {statusLabel(booking.status)}</em>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                          <div className="timeline-covers-row" style={{ gridTemplateColumns: timelineGridTemplate }} aria-label="Cover count by time">
+                            <strong>Covers</strong>
+                            {timelineCoversBySlot.map(slot => <span key={slot.slot}>{slot.covers}<small>{slot.slot}</small></span>)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </section>
                 )}
                 {operatorMode === 'availability' && (
