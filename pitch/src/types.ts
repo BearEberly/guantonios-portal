@@ -142,3 +142,17 @@ export interface OperatorState {
   notifications: Array<{ eventType: string; status: string; adapter: string; preview: Record<string, unknown>; createdAt: string }>;
   error?: string;
 }
+
+export interface SmsReadiness {
+  ok: boolean;
+  enabled?: boolean;
+  mode?: 'disabled' | 'test' | string;
+  demo?: boolean;
+  database?: boolean;
+  ai?: boolean;
+  webhook?: boolean;
+  allowlist?: boolean;
+  carrierApproved?: boolean;
+  rehearsal?: string;
+  error?: string;
+}

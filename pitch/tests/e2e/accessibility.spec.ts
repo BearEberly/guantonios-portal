@@ -44,7 +44,7 @@ test('protected operator page passes automated accessibility smoke checks after 
   await expectNoAxeViolations(page);
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
-  await page.getByText(/disabled notification adapter/i).waitFor({ timeout: 8000 });
+  await page.getByText(/SMS operations/i).waitFor({ timeout: 8000 });
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
 });

@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, TableCombination, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -105,4 +105,8 @@ export function operatorGuest(token: string, input:
 
 export function operatorReset(token: string) {
   return request<{ ok: boolean; reset: boolean; error?: string }>('/api/demo/operator/reset', {}, token);
+}
+
+export function operatorSmsReadiness(token: string) {
+  return request<SmsReadiness>('/api/demo/sms/rehearse', undefined, token);
 }

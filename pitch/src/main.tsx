@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorReset, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, TableCombination, WaitlistEntry } from './types';
+import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorReset, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -417,7 +417,7 @@ function ManagePage() {
   );
 }
 
-type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Reports';
+type OperatorRailSection = 'Book' | 'Floor' | 'Wait' | 'Guests' | 'Texts' | 'Reports';
 type OperatorMode = 'floor' | 'timeline' | 'availability' | 'reports';
 
 function dateKeyFromTimestamp(value: string) {
@@ -453,6 +453,7 @@ function OperatorPage() {
   const defaultServiceDate = nextBookableDate();
   const [token, setToken] = useState(sessionStorage.getItem('demoOperatorToken') || '');
   const [state, setState] = useState<OperatorState | null>(null);
+  const [smsReadiness, setSmsReadiness] = useState<SmsReadiness | null>(null);
   const [status, setStatus] = useState('Enter the protected demo operator passcode.');
   const [busy, setBusy] = useState(false);
   const [selectedServiceDate, setSelectedServiceDate] = useState(defaultServiceDate);
@@ -518,6 +519,11 @@ function OperatorPage() {
       if (!result) throw lastError instanceof Error ? lastError : new Error('Operator data unavailable');
       sessionStorage.setItem('demoOperatorToken', token);
       setState(result);
+      try {
+        setSmsReadiness(await operatorSmsReadiness(token));
+      } catch (error) {
+        setSmsReadiness({ ok: false, error: error instanceof Error ? error.message : 'SMS readiness unavailable' });
+      }
       setStatus(loadedStatus);
     } catch (error) {
       setStatus(`Operator access failed: ${error instanceof Error ? error.message : 'Check passcode.'}`);
@@ -859,6 +865,26 @@ function OperatorPage() {
       .some(value => value.toLowerCase().includes(query));
   };
   const visibleProfiles = profiles.filter(profileMatches);
+  const smsStatusLabel = smsReadiness?.enabled ? 'Ready for approved test texts' : smsReadiness?.ok ? 'Disabled until carrier approval' : 'Readiness unavailable';
+  const smsModeLabel = smsReadiness?.mode === 'test' ? 'Test mode' : 'Disabled mode';
+  const smsReadinessRows = [
+    { label: 'Conversation DB', ready: Boolean(smsReadiness?.database), detail: 'Private SMS state' },
+    { label: 'AI interpreter', ready: Boolean(smsReadiness?.ai), detail: 'Reservation intent parsing' },
+    { label: 'Webhook secret', ready: Boolean(smsReadiness?.webhook), detail: 'Signed Twilio callbacks' },
+    { label: 'Test allowlist', ready: Boolean(smsReadiness?.allowlist), detail: 'Approved tester only' },
+    { label: 'Carrier approval', ready: Boolean(smsReadiness?.carrierApproved), detail: 'Required before live SMS' }
+  ];
+  const textTemplates = [
+    ...(selectedBooking ? [
+      { label: 'Confirm reservation', body: `${selectedBooking.guestLabel || 'Guest'} is confirmed for ${selectedBooking.partySize} at ${formatLocalTime(selectedBooking.startsAt)} ${selectedBooking.section}.` },
+      { label: 'Running behind', body: `We are running a few minutes behind for ${formatLocalTime(selectedBooking.startsAt)}. We will keep your table status updated.` },
+      { label: 'Cancel help', body: `Reply CONFIRM CANCEL only if you want to cancel ${selectedBooking.reference}. Reply VIEW to keep the reservation.` }
+    ] : []),
+    ...(selectedWaitlistEntry ? [
+      { label: 'Table ready', body: `${selectedWaitlistEntry.guestLabel}, your table is ready. Please check in at the host stand.` },
+      { label: 'Wait update', body: `${selectedWaitlistEntry.guestLabel}, your quoted wait is about ${selectedWaitlistEntry.quotedWaitMinutes} minutes.` }
+    ] : [])
+  ];
   const railGroups = [
     { label: 'All', count: bookings.length },
     { label: 'Notify', count: previewCount },
@@ -905,6 +931,7 @@ function OperatorPage() {
     { icon: 'floor', label: 'Floor', count: activeBookings.length + tableBlocks.length + tableCombinations.length },
     { icon: 'wait', label: 'Wait', count: waitlistCount },
     { icon: 'guest', label: 'Guests', count: profiles.length },
+    { icon: 'texts', label: 'Texts', count: previewCount },
     { icon: 'reports', label: 'Reports', count: reportAttentionCount || reportCovers }
   ];
   const sectionNames = ['Dining Room', 'Patio'];
@@ -987,6 +1014,11 @@ function OperatorPage() {
       setSelectedReference(null);
       setSelectedWaitlistId(null);
       if (!activeGuestProfile && profiles[0]) selectGuestProfile(profiles[0]);
+      return;
+    }
+    if (label === 'Texts') {
+      setQueueFilter('Notify');
+      setOperatorMode('floor');
       return;
     }
     setOperatorMode('reports');
@@ -1388,7 +1420,7 @@ function OperatorPage() {
             </section>
             <section className="resyos-workbench">
               <aside className="resyos-left-rail" aria-label="Guest queues">
-              {activeRail !== 'Book' && activeRail !== 'Reports' && (
+              {activeRail !== 'Book' && activeRail !== 'Reports' && activeRail !== 'Texts' && (
                 <>
                   <label className="queue-search">
                     <span className="sr-only">Search guest or reference</span>
@@ -1468,6 +1500,58 @@ function OperatorPage() {
                     </article>
                   ))}
                 </div>
+              </div>
+              ) : activeRail === 'Texts' ? (
+              <div className="texts-panel" aria-label="Text message command center">
+                <div className="section-heading">
+                  <div>
+                    <h2>Texts</h2>
+                    <p>Guest messaging command center for confirmations, waitlist updates, and SMS setup status.</p>
+                  </div>
+                </div>
+                <article className={`sms-command-card ${smsReadiness?.enabled ? 'ready' : 'disabled'}`} aria-label="SMS readiness status">
+                  <span>{smsModeLabel}</span>
+                  <strong>{smsStatusLabel}</strong>
+                  <p>Program number: +1 (209) 709-4194. Live sending stays disabled until carrier approval and controlled test activation.</p>
+                </article>
+                <div className="sms-readiness-grid" aria-label="SMS readiness checks">
+                  {smsReadinessRows.map(row => (
+                    <article key={row.label} className={row.ready ? 'ready' : 'blocked'}>
+                      <span>{row.ready ? 'Ready' : 'Pending'}</span>
+                      <strong>{row.label}</strong>
+                      <small>{row.detail}</small>
+                    </article>
+                  ))}
+                </div>
+                <section className="text-template-list" aria-label="Selected party text templates">
+                  <div className="messages-panel-head">
+                    <h3>Selected party templates</h3>
+                    <span>{textTemplates.length ? `${textTemplates.length} ready` : 'Select a party'}</span>
+                  </div>
+                  {textTemplates.length === 0 ? <p>Select a reservation or waitlist party to preview staff message templates.</p> : textTemplates.map(template => (
+                    <article key={template.label}>
+                      <strong>{template.label}</strong>
+                      <p>{template.body}</p>
+                      <button type="button" disabled aria-label={`Preview only ${template.label}`}>Preview only</button>
+                    </article>
+                  ))}
+                </section>
+                <section className="notification-preview-list" aria-label="Notification preview history">
+                  <div className="messages-panel-head">
+                    <h3>Preview history</h3>
+                    <span>{notifications.length} previews</span>
+                  </div>
+                  {notifications.length === 0 ? <p>No confirmation or cancellation previews have been created yet.</p> : notifications.map((notification, index) => (
+                    <article key={`${notification.createdAt}-${index}`}>
+                      <div>
+                        <strong>{notification.eventType.replace(/_/g, ' ')}</strong>
+                        <span>{formatLocalTime(notification.createdAt)} · {notification.adapter}</span>
+                      </div>
+                      <p>{typeof notification.preview.message === 'string' ? notification.preview.message : 'Preview event created. No live text was sent.'}</p>
+                      <em>{statusLabel(notification.status)}</em>
+                    </article>
+                  ))}
+                </section>
               </div>
               ) : activeRail === 'Reports' ? (
               <div className="reports-summary-panel" aria-label="Reports summary">
@@ -2050,7 +2134,8 @@ function OperatorPage() {
                 {openHolds.length === 0 ? <p>No open demo holds.</p> : openHolds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
               </section>
               <section aria-labelledby="notifications-title">
-                <h2 id="notifications-title">Disabled notification adapter</h2>
+                <h2 id="notifications-title">SMS operations</h2>
+                <p>{smsStatusLabel}</p>
                 {notifications.length === 0 ? <p>No previews yet.</p> : notifications.slice(0, 3).map((n, i) => <p key={`${n.createdAt}-${i}`}>{n.eventType}: {n.status}</p>)}
               </section>
             </aside>
@@ -2079,6 +2164,7 @@ function OperatorIcon({ name }: { name: string }) {
   if (name === 'floor') return <svg {...shared}><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M8 9h8M8 15h8M12 5v14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
   if (name === 'wait') return <svg {...shared}><circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2"/><path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
   if (name === 'guest') return <svg {...shared}><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="2"/><path d="M4.5 19a4.5 4.5 0 0 1 9 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M16 8.5a2.5 2.5 0 1 1-1 4.8M15.5 16.5a4 4 0 0 1 4 2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+  if (name === 'texts') return <svg {...shared}><path d="M5 6.5h14v8.5H9l-4 3.5v-12Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/><path d="M9 10h6M9 13h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
   if (name === 'reports') return <svg {...shared}><path d="M5 19V5h14v14H5Z" stroke="currentColor" strokeWidth="2"/><path d="M9 16v-4M12 16V8M15 16v-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
   return <svg {...shared}><path d="M6.5 7.5A7.5 7.5 0 1 1 5 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M5 5v4h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }

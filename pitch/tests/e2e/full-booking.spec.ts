@@ -121,13 +121,36 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
   await expect(page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) })).toBeVisible();
-  await expect(page.getByText(/disabled notification adapter/i)).toBeVisible();
+  await expect(page.getByText(/SMS operations/i)).toBeVisible();
   await page.goto(manageUrl);
   await page.getByRole('button', { name: /load reservation/i }).click();
   await expect(page.getByText(/reservation loaded/i)).toBeVisible();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: /cancel demo reservation/i }).click();
   await expect(page.getByText(/cancelled and capacity returned/i)).toBeVisible();
+});
+
+test('operator Texts rail shows SMS readiness, templates, and preview history', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Texts Guest ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Choose service date').fill(booking.date);
+  await selectReservationRow(page, booking.reference);
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Texts$/i }).click();
+
+  const textsPanel = page.getByLabel('Text message command center');
+  await expect(textsPanel).toBeVisible();
+  await expect(page.getByLabel('SMS readiness status')).toContainText('+1 (209) 709-4194');
+  await expect(page.getByLabel('SMS readiness checks')).toContainText('Conversation DB');
+  await expect(page.getByLabel('SMS readiness checks')).toContainText('Carrier approval');
+  await expect(page.getByLabel('Selected party text templates')).toContainText('Confirm reservation');
+  await expect(page.getByLabel('Selected party text templates')).toContainText(booking.reference);
+  await expect(page.getByLabel('Notification preview history')).toContainText('confirmation preview');
+  await expect(page.getByLabel('Notification preview history')).toContainText(/preview only/i);
 });
 
 test('operator can seat a selected party by tapping an open floor table', async ({ page, request }) => {
