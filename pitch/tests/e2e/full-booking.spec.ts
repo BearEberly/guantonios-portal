@@ -342,6 +342,8 @@ test('operator can advance seated service stage and see turn-risk reporting', as
   const patioMap = page.getByLabel('Patio synthetic floor map');
   const tableP2 = patioMap.getByRole('button', { name: /Table P2, 2 seats/i });
   await expect(tableP2).toBeVisible();
+  await expect(tableP2).toContainText('Stage Guest');
+  await expect(tableP2).toContainText(/P2 · 2 · 7:30/);
   await expect(tableP2.locator('em')).toContainText('Entrees');
 
   await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();

@@ -552,6 +552,12 @@ function turnRiskLabel(risk?: string | null) {
   return 'Not seated';
 }
 
+function floorGuestName(booking?: ReservationSummary | null) {
+  const name = (booking?.guestLabel || 'Demo Guest').trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.length > 2 ? parts.slice(0, 2).join(' ') : name;
+}
+
 function dateKeyFromTimestamp(value: string) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Los_Angeles',
@@ -1073,30 +1079,30 @@ function OperatorPage() {
     setProfileDraftForId(activeGuestProfile.id);
   }, [activeGuestProfile, profileDraftForId]);
   const floorTables = [
-    { code: '12', section: 'Dining Room', seats: 2, shape: 'round', x: 11, y: 18, w: 12, h: 17 },
-    { code: '14', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 18, w: 13, h: 18 },
-    { code: '21', section: 'Dining Room', seats: 2, shape: 'square', x: 11, y: 47, w: 12, h: 17 },
-    { code: '22', section: 'Dining Room', seats: 2, shape: 'square', x: 27, y: 47, w: 12, h: 17 },
-    { code: '31', section: 'Dining Room', seats: 4, shape: 'booth', x: 47, y: 13, w: 14, h: 15 },
-    { code: '32', section: 'Dining Room', seats: 4, shape: 'booth', x: 65, y: 13, w: 14, h: 15 },
-    { code: '33', section: 'Dining Room', seats: 4, shape: 'booth', x: 47, y: 35, w: 14, h: 15 },
-    { code: '34', section: 'Dining Room', seats: 4, shape: 'booth', x: 65, y: 35, w: 14, h: 15 },
-    { code: '35', section: 'Dining Room', seats: 4, shape: 'booth', x: 47, y: 58, w: 14, h: 15 },
-    { code: '36', section: 'Dining Room', seats: 4, shape: 'booth', x: 65, y: 58, w: 14, h: 15 },
-    { code: '37', section: 'Dining Room', seats: 2, shape: 'square', x: 84, y: 20, w: 10, h: 15 },
-    { code: '38', section: 'Dining Room', seats: 2, shape: 'square', x: 84, y: 45, w: 10, h: 15 },
-    { code: '39', section: 'Dining Room', seats: 2, shape: 'square', x: 84, y: 70, w: 10, h: 15 },
-    { code: '40', section: 'Dining Room', seats: 4, shape: 'round', x: 11, y: 73, w: 12, h: 17 },
-    { code: '41', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 73, w: 12, h: 17 },
-    { code: '42', section: 'Dining Room', seats: 6, shape: 'booth', x: 47, y: 80, w: 32, h: 12 },
-    { code: 'P1', section: 'Patio', seats: 2, shape: 'round', x: 10, y: 23, w: 12, h: 23 },
-    { code: 'P2', section: 'Patio', seats: 2, shape: 'round', x: 28, y: 23, w: 12, h: 23 },
-    { code: 'P3', section: 'Patio', seats: 4, shape: 'round', x: 46, y: 23, w: 13, h: 24 },
-    { code: 'P4', section: 'Patio', seats: 4, shape: 'round', x: 64, y: 23, w: 13, h: 24 },
-    { code: 'P5', section: 'Patio', seats: 4, shape: 'square', x: 20, y: 63, w: 18, h: 22 },
-    { code: 'P6', section: 'Patio', seats: 6, shape: 'square', x: 48, y: 63, w: 26, h: 22 },
-    { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 17, w: 9, h: 31 },
-    { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 56, w: 9, h: 31 }
+    { code: '12', section: 'Dining Room', seats: 2, shape: 'round', zone: 'front-window', x: 10, y: 18, w: 12, h: 17, rotation: -2, seatsVisual: 2 },
+    { code: '14', section: 'Dining Room', seats: 4, shape: 'round', zone: 'front-window', x: 27, y: 18, w: 13, h: 18, rotation: 2, seatsVisual: 4 },
+    { code: '21', section: 'Dining Room', seats: 2, shape: 'square', zone: 'center-aisle', x: 10, y: 47, w: 12, h: 17, rotation: 3, seatsVisual: 2 },
+    { code: '22', section: 'Dining Room', seats: 2, shape: 'square', zone: 'center-aisle', x: 27, y: 47, w: 12, h: 17, rotation: -3, seatsVisual: 2 },
+    { code: '31', section: 'Dining Room', seats: 4, shape: 'booth', zone: 'banquette', x: 47, y: 13, w: 14, h: 15, rotation: 0, seatsVisual: 4 },
+    { code: '32', section: 'Dining Room', seats: 4, shape: 'booth', zone: 'banquette', x: 65, y: 13, w: 14, h: 15, rotation: 0, seatsVisual: 4 },
+    { code: '33', section: 'Dining Room', seats: 4, shape: 'booth', zone: 'banquette', x: 47, y: 35, w: 14, h: 15, rotation: 0, seatsVisual: 4 },
+    { code: '34', section: 'Dining Room', seats: 4, shape: 'booth', zone: 'banquette', x: 65, y: 35, w: 14, h: 15, rotation: 0, seatsVisual: 4 },
+    { code: '35', section: 'Dining Room', seats: 4, shape: 'booth', zone: 'banquette', x: 47, y: 58, w: 14, h: 15, rotation: 0, seatsVisual: 4 },
+    { code: '36', section: 'Dining Room', seats: 4, shape: 'booth', zone: 'banquette', x: 65, y: 58, w: 14, h: 15, rotation: 0, seatsVisual: 4 },
+    { code: '37', section: 'Dining Room', seats: 2, shape: 'square', zone: 'oven-rail', x: 84, y: 20, w: 10, h: 15, rotation: -4, seatsVisual: 2 },
+    { code: '38', section: 'Dining Room', seats: 2, shape: 'square', zone: 'oven-rail', x: 84, y: 45, w: 10, h: 15, rotation: 4, seatsVisual: 2 },
+    { code: '39', section: 'Dining Room', seats: 2, shape: 'square', zone: 'oven-rail', x: 84, y: 70, w: 10, h: 15, rotation: -3, seatsVisual: 2 },
+    { code: '40', section: 'Dining Room', seats: 4, shape: 'round', zone: 'front-window', x: 10, y: 73, w: 12, h: 17, rotation: 2, seatsVisual: 4 },
+    { code: '41', section: 'Dining Room', seats: 4, shape: 'round', zone: 'front-window', x: 27, y: 73, w: 12, h: 17, rotation: -2, seatsVisual: 4 },
+    { code: '42', section: 'Dining Room', seats: 6, shape: 'booth', zone: 'family-booth', x: 47, y: 80, w: 32, h: 12, rotation: 0, seatsVisual: 6 },
+    { code: 'P1', section: 'Patio', seats: 2, shape: 'round', zone: 'patio-rail', x: 10, y: 23, w: 12, h: 23, rotation: -3, seatsVisual: 2 },
+    { code: 'P2', section: 'Patio', seats: 2, shape: 'round', zone: 'patio-rail', x: 28, y: 23, w: 12, h: 23, rotation: 2, seatsVisual: 2 },
+    { code: 'P3', section: 'Patio', seats: 4, shape: 'round', zone: 'patio-rail', x: 46, y: 23, w: 13, h: 24, rotation: -1, seatsVisual: 4 },
+    { code: 'P4', section: 'Patio', seats: 4, shape: 'round', zone: 'patio-rail', x: 64, y: 23, w: 13, h: 24, rotation: 3, seatsVisual: 4 },
+    { code: 'P5', section: 'Patio', seats: 4, shape: 'square', zone: 'garden', x: 20, y: 63, w: 18, h: 22, rotation: 2, seatsVisual: 4 },
+    { code: 'P6', section: 'Patio', seats: 6, shape: 'square', zone: 'garden', x: 48, y: 63, w: 26, h: 22, rotation: -2, seatsVisual: 6 },
+    { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', zone: 'counter', x: 82, y: 17, w: 9, h: 31, rotation: 0, seatsVisual: 1 },
+    { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', zone: 'counter', x: 82, y: 56, w: 9, h: 31, rotation: 0, seatsVisual: 1 }
   ] as const;
   const activeFloorBookings = activeBookings.filter(booking => rangeOverlapsSlot(booking.startsAt, booking.endsAt, floorFocusTime));
   const activeFloorBlocks = tableBlocks.filter(block => block.status === 'active' && rangeOverlapsSlot(block.startsAt, block.endsAt, floorFocusTime));
@@ -1268,7 +1274,38 @@ function OperatorPage() {
     { icon: 'texts', label: 'Texts', count: previewCount },
     { icon: 'reports', label: 'Reports', count: reportAttentionCount || reportCovers }
   ];
-  const sectionNames = ['Dining Room', 'Patio'];
+  const floorRoomDetails = {
+    'Dining Room': {
+      mapClass: 'dining',
+      summary: 'Host stand · window two tops · banquette wall · pizza oven',
+      zones: [
+        { className: 'front-window', label: 'Window tables' },
+        { className: 'center-aisle', label: 'Main aisle' },
+        { className: 'banquette', label: 'Banquette wall' },
+        { className: 'oven-rail', label: 'Oven rail' }
+      ],
+      landmarks: [
+        { className: 'host', label: 'Host stand' },
+        { className: 'kitchen', label: 'Kitchen pass' },
+        { className: 'bar', label: 'Pizza oven' }
+      ]
+    },
+    Patio: {
+      mapClass: 'patio',
+      summary: 'Patio rail · garden tables · counter · gate',
+      zones: [
+        { className: 'patio-rail', label: 'Patio rail' },
+        { className: 'garden', label: 'Garden tables' },
+        { className: 'counter', label: 'Counter' }
+      ],
+      landmarks: [
+        { className: 'host', label: 'Patio entry' },
+        { className: 'kitchen', label: 'Gate' },
+        { className: 'bar', label: 'Bar rail' }
+      ]
+    }
+  } as const;
+  const sectionNames = ['Dining Room', 'Patio'] as const;
   const timelineBookings = [...visibleBookings].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const timelineTableCodes = new Set(floorTables.map(table => table.code));
   const timelineBookingsByTable = new Map<string, typeof timelineBookings>();
@@ -2186,48 +2223,60 @@ function OperatorPage() {
               <div className={`floor-plan-panel mode-${activeRail === 'Reports' ? 'reports' : operatorMode}`}>
                 {activeRail !== 'Reports' && operatorMode === 'floor' && (
                   <>
-                    {sectionNames.map(sectionName => (
-                      <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
-                        <div className="floor-section-head">
-                          <h2>{sectionName}</h2>
-                          <span>{sectionName === 'Dining Room' ? 'Host stand · dining room · bar' : 'Patio rail · counter'}</span>
-                        </div>
-                        <div className={`floor-map floor-map-${sectionName === 'Dining Room' ? 'dining' : 'patio'}`} aria-label={`${sectionName} synthetic floor map`}>
-                          <span className="floor-landmark host">Host</span>
-                          <span className="floor-landmark kitchen">{sectionName === 'Dining Room' ? 'Kitchen' : 'Gate'}</span>
-                          <span className="floor-landmark bar">{sectionName === 'Dining Room' ? 'Pizza oven' : 'Bar'}</span>
-                          {floorTables.filter(table => table.section === sectionName).map(table => {
-                            const booking = bookingsByTable.get(table.code);
-                            const tableBlock = tableBlocksByTable.get(table.code);
-                            const tileStatus = booking ? booking.status : tableBlock ? 'blocked' : 'open';
-                            const assignable = floorAction === 'seat' && !booking && !tableBlock && canSeatAtTable(table);
-                            const blockable = !booking && !tableBlock && floorAction === 'block';
-                            const dropReady = assignable && Boolean(activeSeatCandidate);
-                            const dragOver = dragTargetTable === table.code;
-                            const comboMember = floorAction === 'combine' && tableCombinations.some(combo => combo.tableCodes.includes(table.code));
-                            const tooSmall = floorAction === 'seat' && !booking && !tableBlock && Boolean(activeSeatCandidate && activeSeatCandidate.partySize > table.seats);
-                            return (
-                              <button
-                                type="button"
-                                key={table.code}
-                                className={`floor-table ${table.shape} ${tileStatus} ${booking ? `service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)}` : ''} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
-                                style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
-                                onClick={() => handleTableTap(table)}
-                                onDragOver={event => tableDragOver(event, table)}
-                                onDragLeave={() => tableDragLeave(table)}
-                                onDrop={event => dropBookingAtTable(event, table)}
-                                aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
-                                aria-label={`Table ${table.code}, ${table.seats} seats at ${slotLabelForTime(floorFocusTime)}${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : tableBlock ? `, blocked ${blockWindowLabel(tableBlock)}, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
-                              >
-                                <strong>{table.code}</strong>
-                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? `Blocked ${slotLabelForTime(floorFocusTime)}` : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
-                                {booking && <em>{serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    ))}
+                    {sectionNames.map(sectionName => {
+                      const floorRoom = floorRoomDetails[sectionName];
+                      return (
+                        <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
+                          <div className="floor-section-head">
+                            <h2>{sectionName}</h2>
+                            <span>{floorRoom.summary}</span>
+                          </div>
+                          <div className={`floor-map floor-map-${floorRoom.mapClass}`} aria-label={`${sectionName} synthetic floor map`}>
+                            <div className="floor-room-shell" aria-hidden="true">
+                              {floorRoom.zones.map(zone => <span key={zone.className} className={`floor-zone floor-zone-${zone.className}`}>{zone.label}</span>)}
+                              {floorRoom.landmarks.map(landmark => <span key={landmark.className} className={`floor-landmark ${landmark.className}`}>{landmark.label}</span>)}
+                            </div>
+                            {floorTables.filter(table => table.section === sectionName).map(table => {
+                              const booking = bookingsByTable.get(table.code);
+                              const tableBlock = tableBlocksByTable.get(table.code);
+                              const tileStatus = booking ? booking.status : tableBlock ? 'blocked' : 'open';
+                              const assignable = floorAction === 'seat' && !booking && !tableBlock && canSeatAtTable(table);
+                              const blockable = !booking && !tableBlock && floorAction === 'block';
+                              const dropReady = assignable && Boolean(activeSeatCandidate);
+                              const dragOver = dragTargetTable === table.code;
+                              const comboMember = floorAction === 'combine' && tableCombinations.some(combo => combo.tableCodes.includes(table.code));
+                              const tooSmall = floorAction === 'seat' && !booking && !tableBlock && Boolean(activeSeatCandidate && activeSeatCandidate.partySize > table.seats);
+                              const tableStyle = {
+                                left: `${table.x}%`,
+                                top: `${table.y}%`,
+                                width: `${table.w}%`,
+                                height: `${table.h}%`,
+                                '--table-rotate': `${table.rotation}deg`
+                              } as React.CSSProperties & { '--table-rotate': string };
+                              return (
+                                <button
+                                  type="button"
+                                  key={table.code}
+                                  className={`floor-table ${table.shape} zone-${table.zone} ${tileStatus} ${booking ? `occupied service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)}` : ''} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                  style={tableStyle}
+                                  onClick={() => handleTableTap(table)}
+                                  onDragOver={event => tableDragOver(event, table)}
+                                  onDragLeave={() => tableDragLeave(table)}
+                                  onDrop={event => dropBookingAtTable(event, table)}
+                                  aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
+                                  aria-label={`Table ${table.code}, ${table.seats} seats at ${slotLabelForTime(floorFocusTime)}${booking ? `, ${floorGuestName(booking)}, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, ${serviceStageLabel(booking.serviceStage)}, ${turnRiskLabel(turnRiskForBooking(booking))}` : tableBlock ? `, blocked ${blockWindowLabel(tableBlock)}, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
+                                >
+                                  {booking && <small className="floor-table-code">{table.code}</small>}
+                                  <strong className={booking ? 'floor-table-guest' : undefined}>{booking ? floorGuestName(booking) : table.code}</strong>
+                                  <span>{booking ? `${table.code} · ${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? `Blocked ${slotLabelForTime(floorFocusTime)}` : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
+                                  {booking ? <em>{statusLabel(booking.status)} · {serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em> : !tableBlock && !assignable && !blockable && !comboMember && <i className="floor-seat-dots" aria-hidden="true">{Array.from({ length: Math.min(table.seatsVisual, 6) }, (_, index) => <b key={index} />)}</i>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      );
+                    })}
                     {selectedBooking && (
                       <aside className={`guest-popover ${selectedBooking.status}`} aria-label="Selected reservation preview">
                         <span>{formatLocalTime(selectedBooking.startsAt)}</span>
