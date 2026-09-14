@@ -61,6 +61,55 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await expect(selectedParty).toContainText('Seated');
 });
 
+test('operator can drag a reservation to an open floor table', async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile-chromium', 'Mobile uses the tap Move table fallback; drag is verified on desktop and iPad.');
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: /^search$/i }).click();
+  await expect(page.getByRole('button', { name: /^Indoor$/i }).first()).toBeVisible();
+  await page.getByRole('button', { name: /^Indoor$/i }).first().click();
+  await page.getByRole('button', { name: /confirm demo reservation/i }).click();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  const reference = (await page.locator('.reference').innerText()).trim();
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await expect(page.getByText(reference)).toBeVisible();
+  const dragSource = page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) });
+  const patioTable = page.getByRole('button', { name: /Table P1, 2 seats/i });
+  await expect(dragSource).toBeVisible();
+  await expect(patioTable).toBeVisible();
+  await dragSource.dragTo(patioTable);
+
+  await expect(page.getByText(new RegExp(`(Dropped|Seated) ${reference} at table P1`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+});
+
+test('operator can use Move table mode as a touch fallback', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: /^search$/i }).click();
+  await expect(page.getByRole('button', { name: /^Indoor$/i }).first()).toBeVisible();
+  await page.getByRole('button', { name: /^Indoor$/i }).first().click();
+  await page.getByRole('button', { name: /confirm demo reservation/i }).click();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  const reference = (await page.locator('.reference').innerText()).trim();
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) }).click();
+  await page.getByRole('button', { name: /move table/i }).click();
+  await expect(page.getByText(/drag this party or tap an open highlighted table/i)).toBeVisible();
+  await page.getByRole('button', { name: /Table P1, 2 seats, open, drop/i }).click();
+
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+});
+
 
 test('operator can create and seat a booking from the iPad Book rail', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');

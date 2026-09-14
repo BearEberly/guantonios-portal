@@ -425,6 +425,8 @@ function OperatorPage() {
   const [status, setStatus] = useState('Enter the protected demo operator passcode.');
   const [busy, setBusy] = useState(false);
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
+  const [movingReference, setMovingReference] = useState<string | null>(null);
+  const [dragTargetTable, setDragTargetTable] = useState<string | null>(null);
   const [operatorMode, setOperatorMode] = useState<'floor' | 'timeline' | 'availability'>('floor');
   const [activeRail, setActiveRail] = useState<OperatorRailSection>('Floor');
   const [queueFilter, setQueueFilter] = useState('All');
@@ -467,9 +469,11 @@ function OperatorPage() {
       if (nextStatus === 'completed') setQueueFilter('Done');
       if (nextStatus === 'cancelled') setQueueFilter('No-show');
       await load(undefined, tableCode ? `Seated ${reference} at table ${tableCode}.` : `Updated ${reference} to ${statusLabel(nextStatus)}.`);
+      return true;
     } catch (error) {
       setStatus(`Update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
       setBusy(false);
+      return false;
     }
   }
 
@@ -555,7 +559,8 @@ function OperatorPage() {
   const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
   const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
   const previewCount = notifications.length;
-  const selectedBooking = bookings.find(booking => booking.reference === selectedReference) || activeBookings[0] || bookings[0] || null;
+  const explicitSelectedBooking = selectedReference ? bookings.find(booking => booking.reference === selectedReference) || null : null;
+  const selectedBooking = explicitSelectedBooking || activeBookings[0] || bookings[0] || null;
   const floorTables = [
     { code: '12', section: 'Dining Room', seats: 2, shape: 'round', x: 11, y: 18, w: 12, h: 17 },
     { code: '14', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 18, w: 13, h: 18 },
@@ -695,29 +700,86 @@ function OperatorPage() {
     if (partySize) setBookPartySize(Math.min(Math.max(partySize, 1), 8));
     setBookStatus(`Ready to search ${partySize || bookPartySize} guests at ${time}.`);
   }
-  const selectedPartyCanMove = Boolean(selectedBooking && !['cancelled', 'completed'].includes(selectedBooking.status));
-  const canSeatAtTable = (table: (typeof floorTables)[number]) => Boolean(selectedBooking && selectedPartyCanMove && selectedBooking.partySize <= table.seats);
-  async function seatSelectedAtTable(table: (typeof floorTables)[number]) {
+  const movingBooking = movingReference ? bookings.find(booking => booking.reference === movingReference) || null : null;
+  const moveCandidate = movingBooking || explicitSelectedBooking;
+  const canMoveBooking = (booking?: ReservationSummary | null) => Boolean(booking && !['cancelled', 'completed'].includes(booking.status));
+  const canSeatBookingAtTable = (booking: ReservationSummary | null | undefined, table: (typeof floorTables)[number]) => Boolean(booking && canMoveBooking(booking) && booking.partySize <= table.seats);
+  const canSeatAtTable = (table: (typeof floorTables)[number]) => canSeatBookingAtTable(moveCandidate, table);
+
+  function beginMoveMode(booking: ReservationSummary) {
+    setSelectedReference(booking.reference);
+    setMovingReference(booking.reference);
+    setOperatorMode('floor');
+    setActiveRail('Floor');
+    setStatus(`Moving ${booking.reference}. Drag or tap a compatible open table.`);
+  }
+
+  function beginReservationDrag(event: React.DragEvent<HTMLElement>, booking: ReservationSummary) {
+    if (!canMoveBooking(booking)) {
+      event.preventDefault();
+      return;
+    }
+    setSelectedReference(booking.reference);
+    setMovingReference(booking.reference);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', booking.reference);
+    setStatus(`Dragging ${booking.reference}. Drop on an open compatible table.`);
+  }
+
+  function endReservationDrag() {
+    setDragTargetTable(null);
+  }
+
+  function tableDragOver(event: React.DragEvent<HTMLElement>, table: (typeof floorTables)[number]) {
+    const booking = moveCandidate;
+    if (!booking || !canSeatBookingAtTable(booking, table)) return;
     const tableBooking = bookingsByTable.get(table.code);
-    if (tableBooking && tableBooking.reference !== selectedBooking?.reference) {
+    if (tableBooking && tableBooking.reference !== booking.reference) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragTargetTable(table.code);
+  }
+
+  function tableDragLeave(table: (typeof floorTables)[number]) {
+    if (dragTargetTable === table.code) setDragTargetTable(null);
+  }
+
+  async function dropBookingAtTable(event: React.DragEvent<HTMLElement>, table: (typeof floorTables)[number]) {
+    event.preventDefault();
+    const reference = event.dataTransfer.getData('text/plain') || movingReference || selectedReference;
+    const booking = bookings.find(item => item.reference === reference) || moveCandidate;
+    setDragTargetTable(null);
+    if (!booking) return;
+    await seatBookingAtTable(booking, table, true);
+  }
+
+  async function seatBookingAtTable(booking: ReservationSummary, table: (typeof floorTables)[number], fromDrag = false) {
+    const tableBooking = bookingsByTable.get(table.code);
+    if (tableBooking && tableBooking.reference !== booking.reference) {
       setSelectedReference(tableBooking.reference);
       setStatus(`Selected ${tableBooking.reference} at table ${table.code}.`);
       return;
     }
-    if (!selectedBooking) {
+    if (!canMoveBooking(booking)) {
+      setStatus(`${booking.reference} is ${statusLabel(booking.status)} and cannot be moved.`);
+      return;
+    }
+    if (!canSeatBookingAtTable(booking, table)) {
+      setStatus(`Table ${table.code} only seats ${table.seats}; select a larger table for ${booking.partySize} guests.`);
+      return;
+    }
+    setMovingReference(null);
+    const updated = await setBookingStatus(booking.reference, 'seated', table.code);
+    if (updated && fromDrag) setStatus(`Dropped ${booking.reference} at table ${table.code}.`);
+  }
+
+  async function seatSelectedAtTable(table: (typeof floorTables)[number]) {
+    if (!moveCandidate) {
       seedOperatorBook(bookTime, table.section === 'Patio' ? 'outdoor' : 'indoor', table.seats);
       setStatus(`Started a ${table.seats}-top booking search from open table ${table.code}.`);
       return;
     }
-    if (!selectedPartyCanMove) {
-      setStatus(`${selectedBooking.reference} is ${statusLabel(selectedBooking.status)} and cannot be seated.`);
-      return;
-    }
-    if (!canSeatAtTable(table)) {
-      setStatus(`Table ${table.code} only seats ${table.seats}; select a larger table for ${selectedBooking.partySize} guests.`);
-      return;
-    }
-    await setBookingStatus(selectedBooking.reference, 'seated', table.code);
+    await seatBookingAtTable(moveCandidate, table);
   }
 
   return (
@@ -891,8 +953,22 @@ function OperatorPage() {
                   </article>
                 ))}
                 {visibleBookings.map(booking => (
-                  <article key={booking.reference} className={`operator-row ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}>
-                    <button type="button" className="operator-row-select" onClick={() => setSelectedReference(booking.reference)} aria-label={`Select ${booking.guestLabel || 'Demo Guest'} ${booking.reference}`}>
+                  <article
+                    key={booking.reference}
+                    className={`operator-row ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''} ${movingReference === booking.reference ? 'moving' : ''}`}
+                    draggable={canMoveBooking(booking)}
+                    onDragStart={event => beginReservationDrag(event, booking)}
+                    onDragEnd={endReservationDrag}
+                  >
+                    <button
+                      type="button"
+                      className="operator-row-select"
+                      draggable={canMoveBooking(booking)}
+                      onDragStart={event => beginReservationDrag(event, booking)}
+                      onDragEnd={endReservationDrag}
+                      onClick={() => setSelectedReference(booking.reference)}
+                      aria-label={`Select ${booking.guestLabel || 'Demo Guest'} ${booking.reference}`}
+                    >
                       <span className="sr-only">Select reservation</span>
                     </button>
                     <div className="operator-guest">
@@ -946,19 +1022,24 @@ function OperatorPage() {
                             const booking = bookingsByTable.get(table.code);
                             const tileStatus = booking ? booking.status : 'open';
                             const assignable = !booking && canSeatAtTable(table);
-                            const tooSmall = !booking && Boolean(selectedBooking && selectedPartyCanMove && selectedBooking.partySize > table.seats);
+                            const dropReady = assignable && Boolean(moveCandidate);
+                            const dragOver = dragTargetTable === table.code;
+                            const tooSmall = !booking && Boolean(moveCandidate && canMoveBooking(moveCandidate) && moveCandidate.partySize > table.seats);
                             return (
                               <button
                                 type="button"
                                 key={table.code}
-                                className={`floor-table ${table.shape} ${tileStatus} ${assignable ? 'assignable' : ''} ${tooSmall ? 'too-small' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                className={`floor-table ${table.shape} ${tileStatus} ${assignable ? 'assignable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                 style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
                                 onClick={() => seatSelectedAtTable(table)}
+                                onDragOver={event => tableDragOver(event, table)}
+                                onDragLeave={() => tableDragLeave(table)}
+                                onDrop={event => dropBookingAtTable(event, table)}
                                 aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
-                                aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : assignable ? `, open, tap to seat ${selectedBooking?.reference}` : ', open'}`}
+                                aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : assignable ? `, open, drop ${moveCandidate?.reference || 'selected party'} here` : ', open'}`}
                               >
                                 <strong>{table.code}</strong>
-                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : assignable ? 'Seat here' : `${table.seats}p`}</span>
+                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : assignable ? (movingReference ? 'Drop here' : 'Seat here') : `${table.seats}p`}</span>
                               </button>
                             );
                           })}
@@ -1019,6 +1100,9 @@ function OperatorPage() {
                                         key={booking.reference}
                                         className={`timeline-reservation-card ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                         style={{ gridColumn: timelineGridColumn(booking) }}
+                                        draggable={canMoveBooking(booking)}
+                                        onDragStart={event => beginReservationDrag(event, booking)}
+                                        onDragEnd={endReservationDrag}
                                         onClick={() => setSelectedReference(booking.reference)}
                                         aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}, table ${booking.tableCode || 'pending'}`}
                                       >
@@ -1052,6 +1136,9 @@ function OperatorPage() {
                                       type="button"
                                       className={`timeline-reservation-card ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                       style={{ gridColumn: timelineGridColumn(booking) }}
+                                      draggable={canMoveBooking(booking)}
+                                      onDragStart={event => beginReservationDrag(event, booking)}
+                                      onDragEnd={endReservationDrag}
                                       onClick={() => setSelectedReference(booking.reference)}
                                       aria-label={`${booking.guestLabel || 'Demo Guest'} ${booking.reference}, pending table`}
                                     >
@@ -1109,14 +1196,16 @@ function OperatorPage() {
                 </div>
               </section>
               {selectedBooking && (
-                <section aria-labelledby="selected-party-title" className="selected-party-panel">
+                <section aria-labelledby="selected-party-title" className={`selected-party-panel ${movingReference === selectedBooking.reference ? 'move-mode' : ''}`}>
                   <h2 id="selected-party-title">Selected party</h2>
                   <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
                   <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
                   <div className="side-actions">
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
+                    <button disabled={busy || !canMoveBooking(selectedBooking)} onClick={() => beginMoveMode(selectedBooking)}>{movingReference === selectedBooking.reference ? 'Moving' : 'Move table'}</button>
                   </div>
+                  {movingReference === selectedBooking.reference && <p className="move-hint">Drag this party or tap an open highlighted table.</p>}
                 </section>
               )}
               <section aria-labelledby="holds-title">
