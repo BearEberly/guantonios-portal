@@ -80,6 +80,20 @@ export interface GuestProfile {
   visits: GuestVisit[];
 }
 
+export interface TableBlock {
+  id: string;
+  tableCode: string;
+  section: SeatingSection;
+  startsAt: string;
+  endsAt: string;
+  serviceDate: string;
+  reason: string;
+  status: 'active' | 'cleared' | string;
+  createdAt: string;
+  updatedAt?: string;
+  clearedAt?: string | null;
+}
+
 export interface WaitlistEntry {
   id: string;
   status: 'waiting' | 'notified' | 'seated' | 'cancelled' | string;
@@ -108,6 +122,7 @@ export interface OperatorState {
   holds: Array<{ id: string; partySize: number; section: SeatingSection; startsAt: string; expiresAt: string; status: string }>;
   waitlist: WaitlistEntry[];
   profiles: GuestProfile[];
+  tableBlocks: TableBlock[];
   notifications: Array<{ eventType: string; status: string; adapter: string; preview: Record<string, unknown>; createdAt: string }>;
   error?: string;
 }

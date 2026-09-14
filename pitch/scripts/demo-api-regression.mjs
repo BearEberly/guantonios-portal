@@ -100,12 +100,22 @@ const opList = await post('/api/demo/operator/list', {}, operatorToken);
 assert(opList.status === 200 && opList.data.bookings.some(b => b.reference === confirm.data.reference && b.status === 'cancelled'), 'operator list missing cancelled booking', opList);
 evidence.push(['operator_list', opList.status, opList.data.bookings.length]);
 
+const block = await post('/api/demo/operator/floor', { op: 'block', tableCode: 'P1', date: open.date, reason: 'API regression block.' }, operatorToken);
+assert(block.status === 200 && block.data.ok && block.data.tableBlock?.tableCode === 'P1', 'table block failed', block);
+const blockList = await post('/api/demo/operator/floor', { op: 'list' }, operatorToken);
+assert(blockList.status === 200 && blockList.data.tableBlocks.some(b => b.tableCode === 'P1' && b.reason === 'API regression block.'), 'table block list missing block', blockList);
+evidence.push(['operator_table_block', block.status, block.data.tableBlock.tableCode]);
+
 const waitCreate = await post('/api/demo/operator/waitlist', { op: 'create', guestLabel: 'API Walk In', contact: '2095550102', date: open.date, time: '19:30', partySize: 2, section: 'either', quotedWaitMinutes: 20, note: 'API regression waitlist.' }, operatorToken);
 assert(waitCreate.status === 200 && waitCreate.data.ok && waitCreate.data.waitlistId, 'waitlist create failed', waitCreate);
 const waitNotify = await post('/api/demo/operator/waitlist', { op: 'status', waitlistId: waitCreate.data.waitlistId, status: 'notified' }, operatorToken);
 assert(waitNotify.status === 200 && waitNotify.data.entry?.status === 'notified', 'waitlist notify failed', waitNotify);
+const blockedSeat = await post('/api/demo/operator/waitlist', { op: 'seat', waitlistId: waitCreate.data.waitlistId, tableCode: 'P1' }, operatorToken);
+assert(blockedSeat.status === 409 && blockedSeat.data.error === 'table_unavailable', 'blocked table should reject waitlist seating', blockedSeat);
+const clearBlock = await post('/api/demo/operator/floor', { op: 'clear', blockId: block.data.tableBlock.id }, operatorToken);
+assert(clearBlock.status === 200 && clearBlock.data.ok, 'clear table block failed', clearBlock);
 const waitSeat = await post('/api/demo/operator/waitlist', { op: 'seat', waitlistId: waitCreate.data.waitlistId, tableCode: 'P1' }, operatorToken);
-assert(waitSeat.status === 200 && waitSeat.data.ok && waitSeat.data.reference && waitSeat.data.tableCode === 'P1', 'waitlist seat failed', waitSeat);
+assert(waitSeat.status === 200 && waitSeat.data.ok && waitSeat.data.reference && waitSeat.data.tableCode === 'P1', 'waitlist seat failed after clearing block', waitSeat);
 const waitList = await post('/api/demo/operator/waitlist', { op: 'list' }, operatorToken);
 assert(waitList.status === 200 && waitList.data.waitlist.some(w => w.id === waitCreate.data.waitlistId && w.status === 'seated'), 'waitlist list missing seated entry', waitList);
 evidence.push(['operator_waitlist_seat', waitSeat.status, waitSeat.data.tableCode, waitSeat.data.reference]);
@@ -130,7 +140,11 @@ if (supabaseUrl && supabaseAnonKey) {
     headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
   });
   assert(directGuests.status >= 400, 'anon key should not directly read reservation_demo.guest_profiles', directGuests.status);
-  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status]);
+  const directBlocks = await fetch(`${supabaseUrl}/rest/v1/table_blocks?select=id&limit=1`, {
+    headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
+  });
+  assert(directBlocks.status >= 400, 'anon key should not directly read reservation_demo.table_blocks', directBlocks.status);
+  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status]);
 }
 
 console.log(JSON.stringify({ ok: true, base, evidence }, null, 2));

@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -54,10 +54,11 @@ export function cancelReservation(input: { reference: string; manageToken: strin
 }
 
 export async function operatorList(token: string) {
-  const [state, waitlist, guests] = await Promise.all([
+  const [state, waitlist, guests, floor] = await Promise.all([
     request<OperatorState>('/api/demo/operator/list', {}, token),
     request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token),
-    request<{ ok: boolean; profiles: GuestProfile[]; error?: string }>('/api/demo/operator/guest', { op: 'list' }, token)
+    request<{ ok: boolean; profiles: GuestProfile[]; error?: string }>('/api/demo/operator/guest', { op: 'list' }, token),
+    request<{ ok: boolean; tableBlocks: TableBlock[]; error?: string }>('/api/demo/operator/floor', { op: 'list' }, token)
   ]);
   const profilesByReference = new Map<string, GuestProfile>();
   for (const profile of guests.profiles || []) {
@@ -74,7 +75,7 @@ export async function operatorList(token: string) {
       privateNotePreview: profile.privateNote ? 'Private note' : ''
     } : booking;
   });
-  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [] };
+  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [] };
 }
 
 export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
@@ -83,6 +84,14 @@ export function operatorStatus(token: string, reference: string, status: string,
 
 export function operatorWaitlist(token: string, input: { op: 'create'; guestLabel: string; contact?: string; date: string; time: string; partySize: number; section?: SeatingSection | 'either'; quotedWaitMinutes?: number; note?: string } | { op: 'status'; waitlistId: string; status: 'waiting' | 'notified' | 'cancelled' } | { op: 'seat'; waitlistId: string; tableCode: string }) {
   return request<{ ok: boolean; waitlistId?: string; reference?: string; status?: string; tableCode?: string; entry?: WaitlistEntry; error?: string }>('/api/demo/operator/waitlist', input, token);
+}
+
+export function operatorFloor(token: string, input:
+  | { op: 'list' }
+  | { op: 'block'; tableCode: string; date: string; startTime?: string; endTime?: string; reason?: string }
+  | { op: 'clear'; blockId: string }
+) {
+  return request<{ ok: boolean; tableBlock?: TableBlock; tableBlocks?: TableBlock[]; error?: string }>('/api/demo/operator/floor', input, token);
 }
 
 export function operatorGuest(token: string, input:

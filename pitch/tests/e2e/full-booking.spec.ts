@@ -22,8 +22,10 @@ async function resetDemoData(request: APIRequestContext) {
     const waitlistBody = await waitlist.json().catch(() => null) as { ok?: boolean; waitlist?: unknown[]; error?: string } | null;
     const guests = await request.post('/api/demo/operator/guest', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
     const guestsBody = await guests.json().catch(() => null) as { ok?: boolean; profiles?: unknown[]; error?: string } | null;
-    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0) return;
-    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length}`;
+    const floor = await request.post('/api/demo/operator/floor', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
+    const floorBody = await floor.json().catch(() => null) as { ok?: boolean; tableBlocks?: unknown[]; error?: string } | null;
+    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0 && (floorBody.tableBlocks || []).length === 0) return;
+    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length} blocks=${(floorBody?.tableBlocks || []).length}`;
   }
   throw new Error(lastError || 'reset failed');
 }
@@ -142,6 +144,33 @@ test('operator can use Move table mode as a touch fallback', async ({ page, requ
   await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P2/i);
 });
 
+
+
+test('operator can block and clear an open table from the iPad floor', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+
+  await expect(page.getByLabel('Floor table controls')).toBeVisible();
+  await page.getByLabel('Table block reason').fill('Manager hold for repair.');
+  await page.getByRole('button', { name: /^Block table$/i }).click();
+  await expect(page.getByText(/Tap an open table to block it for this dinner service/i)).toBeVisible();
+  await page.getByRole('button', { name: /Table P1, 2 seats, open, block this table/i }).click();
+
+  await expect(page.getByText(/Blocked table P1: Manager hold for repair/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats, blocked, Manager hold for repair/i })).toBeVisible();
+  await expect(page.getByLabel('Table blocks')).toContainText('Table P1');
+  await expect(page.getByLabel('Table blocks')).toContainText('Manager hold for repair.');
+
+  await page.getByRole('button', { name: /Table P1, 2 seats, blocked, Manager hold for repair/i }).click();
+  await expect(page.getByText(/Table P1 is blocked: Manager hold for repair/i)).toBeVisible();
+  await page.getByRole('button', { name: /Clear block on table P1/i }).click();
+  await expect(page.getByText(/Cleared block on table P1/i)).toBeVisible();
+  await expect(page.getByLabel('Table blocks')).toContainText('No active table blocks.');
+  await expect(page.getByRole('button', { name: /Table P1, 2 seats, open/i })).toBeVisible();
+});
 
 test('operator can add, notify, and seat a walk-in from the Wait rail', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
