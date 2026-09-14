@@ -277,6 +277,50 @@ test('operator can seat a selected party by tapping an open floor table', async 
 });
 
 
+
+test('operator can edit selected reservation details from the iPad drawer', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Detail Guest ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, booking.date);
+  await selectReservationRow(page, booking.reference);
+
+  const drawer = page.getByLabel('Reservation detail editor');
+  await expect(drawer).toBeVisible();
+  await drawer.getByLabel('Reservation edit guest name').fill('Edited Resy Guest');
+  await drawer.getByLabel('Reservation edit date').fill(booking.date);
+  await drawer.getByLabel('Reservation edit time').selectOption('18:00');
+  await drawer.getByLabel('Reservation edit party size').selectOption('3');
+  await drawer.getByLabel('Reservation edit section').selectOption('indoor');
+  await drawer.getByLabel('Reservation edit contact').fill('(209) 555-0144');
+  await drawer.getByLabel('Reservation edit note').fill('High chair and corner table if possible.');
+  await drawer.getByRole('button', { name: /save details/i }).click();
+
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} details from the iPad drawer`))).toBeVisible();
+  const selectedParty = page.locator('.selected-party-panel');
+  await expect(selectedParty).toContainText('Edited Resy Guest');
+  await expect(selectedParty).toContainText(/6:00.*3 guests.*indoor.*table/i);
+  await expect(selectedParty).toContainText('Host note');
+  await expect(drawer.getByLabel('Reservation edit note')).toHaveValue('High chair and corner table if possible.');
+  const editedRow = reservationRow(page, booking.reference);
+  await expect(editedRow).toContainText('Edited Resy Guest');
+  await expect(editedRow).toContainText(/6:00/);
+  await expect(editedRow).toContainText('Host note');
+
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  await expect(page.locator('.timeline-reservation-card').filter({ hasText: booking.reference })).toContainText('Edited Resy Guest');
+
+  const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+  const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: Array<{ reference: string; guestLabel?: string; partySize?: number; section?: string; contact?: string; operatorNote?: string }> } | null;
+  expect(list.ok()).toBeTruthy();
+  const edited = (body?.bookings || []).find(item => item.reference === booking.reference);
+  expect(edited).toMatchObject({ guestLabel: 'Edited Resy Guest', partySize: 3, section: 'indoor', contact: '2095550144', operatorNote: 'High chair and corner table if possible.' });
+});
+
 test('operator can advance seated service stage and see turn-risk reporting', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
   await resetDemoData(request);

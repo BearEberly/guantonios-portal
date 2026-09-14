@@ -44,6 +44,24 @@ async function findOpenDate(partySize = 2, section = 'indoor', time = '19:30') {
   throw new Error(`No open demo date found for ${partySize} ${section} ${time}`);
 }
 
+async function createConfirmedReservation({ partySize = 2, section = 'indoor', time = '18:00', firstName = 'API', lastName = 'Guest', mobile = '(209) 555-0144' } = {}) {
+  const openSlot = await findOpenDate(partySize, section, time);
+  const stamp = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const holdResult = await post('/api/demo/hold', { date: openSlot.date, time, partySize, section, idempotencyKey: `hold_extra_${stamp}` });
+  assert(holdResult.status === 200 && holdResult.data.ok && holdResult.data.holdToken, 'extra hold failed', holdResult);
+  const confirmResult = await post('/api/demo/confirm', {
+    holdId: holdResult.data.holdId,
+    holdToken: holdResult.data.holdToken,
+    idempotencyKey: `confirm_extra_${stamp}`,
+    firstName,
+    lastName,
+    email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@example.invalid`,
+    mobile
+  });
+  assert(confirmResult.status === 200 && confirmResult.data.ok && confirmResult.data.reference, 'extra confirm failed', confirmResult);
+  return { date: openSlot.date, time, hold: holdResult, confirm: confirmResult };
+}
+
 const evidence = [];
 const reset = await post('/api/demo/operator/reset', {}, operatorToken);
 assert(reset.status === 200 && reset.data.ok, 'operator reset failed', reset);
@@ -114,6 +132,26 @@ assert(assignedBooking?.status === 'seated' && assignedBooking?.tableCode === 'P
 assert(assignedBooking?.serviceStage === 'fired' && assignedBooking?.turnRisk, 'operator list missing service stage state', assignedList);
 evidence.push(['operator_assign_table', assignTable.status, assignedBooking.tableCode, assignedBooking.status]);
 evidence.push(['operator_service_stage', serviceStage.status, assignedBooking.serviceStage, assignedBooking.turnRisk]);
+
+const detailReservation = await createConfirmedReservation({ partySize: 2, section: 'indoor', time: '18:00', firstName: 'API', lastName: 'Detail', mobile: '(209) 555-0144' });
+const detailReference = detailReservation.confirm.data.reference;
+const wrongDetailEdit = await post('/api/demo/operator/edit', { reference: detailReference, partySize: 3 }, 'wrong-token');
+assert(wrongDetailEdit.status === 401 && wrongDetailEdit.data.error === 'operator_unauthorized', 'wrong token should reject operator detail edit', wrongDetailEdit);
+const detailEdit = await post('/api/demo/operator/edit', {
+  reference: detailReference,
+  date: detailReservation.date,
+  time: detailReservation.time,
+  partySize: 3,
+  section: 'indoor',
+  guestLabel: 'API Edited Guest',
+  contact: '2095550144',
+  operatorNote: 'API edit host note.'
+}, operatorToken);
+assert(detailEdit.status === 200 && detailEdit.data.ok && detailEdit.data.reservation?.partySize === 3 && detailEdit.data.reservation?.section === 'indoor', 'operator detail edit failed', detailEdit);
+const detailList = await post('/api/demo/operator/list', {}, operatorToken);
+const editedBooking = detailList.data.bookings.find(b => b.reference === detailReference);
+assert(editedBooking?.guestLabel === 'API Edited Guest' && editedBooking?.contact === '2095550144' && editedBooking?.operatorNote === 'API edit host note.', 'operator list missing edited details', detailList);
+evidence.push(['operator_detail_edit', detailEdit.status, editedBooking.partySize, editedBooking.section, editedBooking.operatorNote]);
 
 const guestLoad = await post('/api/demo/operator/guest', { op: 'load', reference: confirm.data.reference }, operatorToken);
 assert(guestLoad.status === 200 && guestLoad.data.profile?.id && guestLoad.data.profile.visits.some(v => v.reference === confirm.data.reference), 'guest profile load failed', guestLoad);

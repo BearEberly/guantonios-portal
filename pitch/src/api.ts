@@ -89,6 +89,10 @@ export function operatorStatus(token: string, reference: string, status: string,
   return request<{ ok: boolean; reference: string; status: string; tableCode?: string; error?: string }>('/api/demo/operator/status', { reference, status, ...(tableCode ? { tableCode } : {}) }, token);
 }
 
+export function operatorEdit(token: string, input: { reference: string; date?: string; time?: string; partySize?: number; section?: SeatingSection; guestLabel?: string; contact?: string; operatorNote?: string }) {
+  return request<{ ok: boolean; reservation?: ReservationSummary; tableCode?: string; tableCodes?: string[]; error?: string }>('/api/demo/operator/edit', input, token);
+}
+
 
 export function operatorNotify(token: string, input:
   | { op: 'list' }

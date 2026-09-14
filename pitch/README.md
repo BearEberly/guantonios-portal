@@ -9,7 +9,7 @@ All reservation rows are synthetic demo rows stored in the private Supabase `res
 - `/` mirrors the Guantonio homepage and links to the demo reservation flow.
 - `/reservations` lets a guest search, hold, and confirm a synthetic reservation. When the exact requested time is unavailable, it can add a consented synthetic Notify request for the iPad queue.
 - `/manage` lets the guest view, change, or cancel the synthetic booking with the generated management token.
-- `/operator` is a protected internal iPad view for check in, seating status changes, timed table availability blocks, manual service-stage tracking, cancellation, floor snapshot, Notify requests, waitlist, Texts readiness, recent holds, and reset.
+- `/operator` is a protected internal iPad view for check in, reservation detail edits, seating status changes, timed table availability blocks, manual service-stage tracking, cancellation, floor snapshot, Notify requests, waitlist, Texts readiness, recent holds, and reset.
 - `/sms`, `/sms/privacy`, and `/sms/terms` describe the separate Bear Eberly Photos SMS demo and its setup status.
 - `/api/demo/notify` creates a protected synthetic Notify request from the public reservation flow.
 - `/api/demo/operator/notify` requires the operator token and lists or updates Notify requests for the iPad queue.
@@ -52,7 +52,7 @@ node scripts/demo-api-regression.mjs
 PLAYWRIGHT_BASE_URL=http://localhost:8788 DEMO_OPERATOR_TOKEN=<token> npm run test:e2e
 ```
 
-The API regression covers reset, availability search, Notify creation and operator update, timed table block creation and blocked-table seating rejection, hold retry, confirm retry, wrong-token rejection, view, protected operator table assignment, change, cancel, operator list, one-table concurrency, and direct private schema isolation. The Playwright suite covers desktop, iPad sized, and phone sized booking and operator flows, plus automated accessibility smoke checks.
+The API regression covers reset, availability search, Notify creation and operator update, timed table block creation and blocked-table seating rejection, hold retry, confirm retry, wrong-token rejection, view, protected operator reservation detail edit, protected operator table assignment, change, cancel, operator list, one-table concurrency, and direct private schema isolation. The Playwright suite covers desktop, iPad sized, and phone sized booking and operator flows, plus automated accessibility smoke checks.
 
 ## Resetting demo data
 

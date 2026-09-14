@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, createNotifyRequest, operatorFloor, operatorGuest, operatorList, operatorNotify, operatorPacing, operatorReset, operatorService, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import { cancelReservation, changeReservation, confirmReservation, createHold, createNotifyRequest, operatorEdit, operatorFloor, operatorGuest, operatorList, operatorNotify, operatorPacing, operatorReset, operatorService, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
 import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, NotifyRequest, OperatorState, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, TurnRisk, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
@@ -662,6 +662,15 @@ function OperatorPage() {
   const [profileNoteDraft, setProfileNoteDraft] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
   const [serviceBusy, setServiceBusy] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [detailDraftForReference, setDetailDraftForReference] = useState<string | null>(null);
+  const [detailDate, setDetailDate] = useState(defaultServiceDate);
+  const [detailTime, setDetailTime] = useState(DEFAULT_FLOOR_FOCUS_TIME);
+  const [detailPartySize, setDetailPartySize] = useState(2);
+  const [detailSection, setDetailSection] = useState<SeatingSection>('indoor');
+  const [detailGuestName, setDetailGuestName] = useState('Demo Guest');
+  const [detailContact, setDetailContact] = useState('');
+  const [detailNote, setDetailNote] = useState('');
   const [profileDraftForId, setProfileDraftForId] = useState<string | null>(null);
 
   async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
@@ -733,6 +742,38 @@ function OperatorPage() {
     }
   }
 
+  async function saveReservationDetail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedBooking) return;
+    setDetailBusy(true);
+    try {
+      const result = await operatorEdit(token, {
+        reference: selectedBooking.reference,
+        date: detailDate,
+        time: detailTime,
+        partySize: detailPartySize,
+        section: detailSection,
+        guestLabel: detailGuestName,
+        contact: normalizeDemoMobile(detailContact),
+        operatorNote: detailNote
+      });
+      if (!result.ok || !result.reservation) throw new Error(result.error || 'Reservation detail update failed');
+      setSelectedServiceDate(detailDate);
+      setBookDate(detailDate);
+      setWaitDate(detailDate);
+      setFloorFocusTime(detailTime);
+      selectReservation(selectedBooking.reference);
+      setDetailDraftForReference(null);
+      await load(undefined, `Updated ${selectedBooking.reference} details from the iPad drawer.`);
+      return true;
+    } catch (error) {
+      setStatus(`Reservation detail update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      return false;
+    } finally {
+      setDetailBusy(false);
+    }
+  }
+
   async function resetDemo() {
     if (!window.confirm('Reset all synthetic demo reservations?')) return;
     setBusy(true);
@@ -742,6 +783,7 @@ function OperatorPage() {
       setSelectedWaitlistId(null);
       setSelectedGuestProfileId(null);
       setProfileDraftForId(null);
+      setDetailDraftForReference(null);
       setFloorAction('seat');
       setQueueFilter('All');
       await load(undefined, 'Synthetic demo data reset.');
@@ -759,6 +801,7 @@ function OperatorPage() {
     setBookSlots([]);
     setSelectedReference(null);
     setSelectedWaitlistId(null);
+    setDetailDraftForReference(null);
     setMovingReference(null);
     setDragTargetTable(null);
     setFloorAction('seat');
@@ -990,6 +1033,31 @@ function OperatorPage() {
   const selectedGuestProfile = selectedGuestProfileId ? profiles.find(profile => profile.id === selectedGuestProfileId) || null : null;
   const selectedBookingProfile = selectedBooking?.guestProfileId ? profiles.find(profile => profile.id === selectedBooking.guestProfileId) || null : null;
   const activeGuestProfile = selectedGuestProfile || selectedBookingProfile || null;
+  const selectedBookingDetailKey = selectedBooking ? [
+    selectedBooking.reference,
+    selectedBooking.startsAt,
+    selectedBooking.partySize,
+    selectedBooking.section,
+    selectedBooking.guestLabel || '',
+    selectedBooking.contact || selectedBookingProfile?.contact || '',
+    selectedBooking.operatorNote || ''
+  ].join('|') : null;
+
+  useEffect(() => {
+    if (!selectedBooking || !selectedBookingDetailKey) {
+      if (detailDraftForReference !== null) setDetailDraftForReference(null);
+      return;
+    }
+    if (detailDraftForReference === selectedBookingDetailKey) return;
+    setDetailDraftForReference(selectedBookingDetailKey);
+    setDetailDate(dateKeyFromTimestamp(selectedBooking.startsAt));
+    setDetailTime(localTimeKeyFromTimestamp(selectedBooking.startsAt));
+    setDetailPartySize(selectedBooking.partySize);
+    setDetailSection(selectedBooking.section);
+    setDetailGuestName(selectedBooking.guestLabel || 'Demo Guest');
+    setDetailContact(selectedBooking.contact || selectedBookingProfile?.contact || '');
+    setDetailNote(selectedBooking.operatorNote || '');
+  }, [selectedBooking, selectedBookingProfile, selectedBookingDetailKey, detailDraftForReference]);
 
   useEffect(() => {
     if (!activeGuestProfile) {
@@ -1374,6 +1442,7 @@ function OperatorPage() {
     setSelectedGuestProfileId(profile.id);
     setSelectedReference(null);
     setSelectedWaitlistId(null);
+    setDetailDraftForReference(null);
     setProfileNameDraft(profile.guestLabel);
     setProfileContactDraft(profile.contact || '');
     setProfileTagsDraft(profile.tags.join(', '));
@@ -2091,6 +2160,7 @@ function OperatorPage() {
                       {booking.status === 'seated' && <span>{serviceStageShortLabel(booking.serviceStage)}</span>}
                       {booking.status === 'seated' && <span>{turnRiskLabel(turnRiskForBooking(booking))}</span>}
                       {booking.privateNotePreview && <span>Private note</span>}
+                      {booking.operatorNote && <span>Host note</span>}
                     </div>
                     <span className="status-pill">{statusLabel(booking.status)}</span>
                     <div className="operator-actions">
@@ -2474,7 +2544,39 @@ function OperatorPage() {
                   <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedDisplayTable} · {statusLabel(selectedBooking.status)}</p>
                   <div className="profile-chip-row" aria-label="Selected guest quick tags">
                     {(selectedProfileTags.length ? selectedProfileTags.slice(0, 4) : [selectedBooking.visitCount && selectedBooking.visitCount > 1 ? `${selectedBooking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
+                    {selectedBooking.operatorNote && <span>Host note</span>}
                   </div>
+                  <form className="reservation-detail-editor" aria-label="Reservation detail editor" onSubmit={saveReservationDetail}>
+                    <div>
+                      <span>Reservation details</span>
+                      <strong>{selectedBooking.reference}</strong>
+                      <p>Edit the party, time, seating, contact, and private host note from the iPad drawer.</p>
+                    </div>
+                    <label>Guest name<input value={detailGuestName} onChange={event => setDetailGuestName(event.target.value)} maxLength={80} aria-label="Reservation edit guest name" /></label>
+                    <div className="reservation-detail-grid">
+                      <label>Date<input type="date" value={detailDate} onChange={event => setDetailDate(event.target.value)} aria-label="Reservation edit date" /></label>
+                      <label>Time
+                        <select value={detailTime} onChange={event => setDetailTime(event.target.value)} aria-label="Reservation edit time">
+                          {timeSlotKeys.map((time, index) => <option key={time} value={time}>{timeSlots[index]}</option>)}
+                        </select>
+                      </label>
+                      <label>Guests
+                        <select value={detailPartySize} onChange={event => setDetailPartySize(Number(event.target.value))} aria-label="Reservation edit party size">
+                          {Array.from({ length: 12 }, (_, index) => index + 1).map(size => <option key={size} value={size}>{size}</option>)}
+                        </select>
+                      </label>
+                      <label>Seating
+                        <select value={detailSection} onChange={event => setDetailSection(event.target.value as SeatingSection)} aria-label="Reservation edit section">
+                          <option value="indoor">Indoor</option>
+                          <option value="outdoor">Outdoor</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label>Mobile<input value={detailContact} onChange={event => setDetailContact(event.target.value)} maxLength={96} aria-label="Reservation edit contact" /></label>
+                    <label>Host note<textarea value={detailNote} onChange={event => setDetailNote(event.target.value)} maxLength={400} aria-label="Reservation edit note" /></label>
+                    <button type="submit" disabled={busy || detailBusy || ['cancelled', 'completed'].includes(selectedBooking.status)}>{detailBusy ? 'Saving...' : 'Save details'}</button>
+                    {['cancelled', 'completed'].includes(selectedBooking.status) && <p className="move-hint">Only active reservations can be edited from the iPad drawer.</p>}
+                  </form>
                   <div className="guest-intel-card" aria-label="Guest intelligence">
                     <div>
                       <span>{selectedBookingProfile ? `${selectedBookingProfile.visitCount} ${selectedBookingProfile.visitCount === 1 ? 'visit' : 'visits'}` : 'Guest intelligence'}</span>

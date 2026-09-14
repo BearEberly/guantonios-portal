@@ -36,6 +36,8 @@ export interface ReservationSummary {
   startsAt: string;
   endsAt: string;
   guestLabel?: string;
+  contact?: string;
+  operatorNote?: string;
   guestProfileId?: string;
   tableCode?: string | null;
   tableCodes?: string[];

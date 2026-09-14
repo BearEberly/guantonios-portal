@@ -97,6 +97,10 @@ export async function callOperatorServiceRpc(env, payload) {
   return callSupabaseRpc(env, 'reservation_demo_operator_service', { payload, secret: env.DEMO_API_SECRET });
 }
 
+export async function callOperatorEditRpc(env, payload) {
+  return callSupabaseRpc(env, 'reservation_demo_operator_edit', { payload, secret: env.DEMO_API_SECRET });
+}
+
 export async function callResetRpc(env) {
   return callSupabaseRpc(env, 'reservation_demo_reset', { secret: env.DEMO_API_SECRET });
 }
@@ -133,6 +137,6 @@ export async function handleOperatorStatus(request, env) {
 function mapStatus(error) {
   if (error === 'unauthorized' || error === 'operator_unauthorized' || error === 'not_found_or_unauthorized') return 401;
   if (error === 'demo_environment_missing') return 503;
-  if (['slot_unavailable', 'hold_expired_or_unauthorized', 'table_unavailable', 'table_size_mismatch', 'table_required', 'section_mismatch', 'guest_profile_not_found', 'table_block_conflict', 'table_block_not_found', 'invalid_table_block_time', 'invalid_pacing_rule_time', 'pacing_rule_not_found', 'invalid_service_stage', 'service_stage_unavailable', 'invalid_notify_request', 'invalid_notify_status', 'notify_request_not_found'].includes(error)) return 409;
+  if (['slot_unavailable', 'hold_expired_or_unauthorized', 'table_unavailable', 'table_size_mismatch', 'table_required', 'section_mismatch', 'guest_profile_not_found', 'table_block_conflict', 'table_block_not_found', 'invalid_table_block_time', 'invalid_pacing_rule_time', 'pacing_rule_not_found', 'invalid_service_stage', 'service_stage_unavailable', 'invalid_notify_request', 'invalid_notify_status', 'notify_request_not_found', 'invalid_operator_edit', 'operator_edit_unavailable'].includes(error)) return 409;
   return 400;
 }
