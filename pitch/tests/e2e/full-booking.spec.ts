@@ -52,8 +52,7 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await patioTable.click();
 
   await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
-  await expect(page.getByText(/2 guests · outdoor · table P1/i)).toBeVisible();
   const selectedParty = page.locator('.selected-party-panel');
-  await expect(selectedParty).toContainText('table P1');
+  await expect(selectedParty).toContainText(/2 guests · outdoor · table P1/i);
   await expect(selectedParty).toContainText('Seated');
 });
