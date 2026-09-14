@@ -61,6 +61,10 @@ export async function callDemoRpc(env, payload) {
   return callSupabaseRpc(env, 'reservation_demo_api', { payload, secret: env.DEMO_API_SECRET });
 }
 
+export async function callOperatorListRpc(env, payload) {
+  return callSupabaseRpc(env, 'reservation_demo_operator_list', { payload, secret: env.DEMO_API_SECRET });
+}
+
 export async function callOperatorStatusRpc(env, payload) {
   return callSupabaseRpc(env, 'reservation_demo_operator_status', { payload, secret: env.DEMO_API_SECRET });
 }

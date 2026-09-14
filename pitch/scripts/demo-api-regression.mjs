@@ -120,6 +120,17 @@ const waitList = await post('/api/demo/operator/waitlist', { op: 'list' }, opera
 assert(waitList.status === 200 && waitList.data.waitlist.some(w => w.id === waitCreate.data.waitlistId && w.status === 'seated'), 'waitlist list missing seated entry', waitList);
 evidence.push(['operator_waitlist_seat', waitSeat.status, waitSeat.data.tableCode, waitSeat.data.reference]);
 
+const comboFloor = await post('/api/demo/operator/floor', { op: 'list' }, operatorToken);
+assert(comboFloor.status === 200 && comboFloor.data.tableCombinations.some(c => c.code === 'P3+P4'), 'operator floor missing table combinations', comboFloor);
+const comboWait = await post('/api/demo/operator/waitlist', { op: 'create', guestLabel: 'API Combo Eight', contact: '2095550108', date: open.date, time: '19:30', partySize: 8, section: 'outdoor', quotedWaitMinutes: 30, note: 'API combination waitlist.' }, operatorToken);
+assert(comboWait.status === 200 && comboWait.data.ok && comboWait.data.waitlistId, 'combo waitlist create failed', comboWait);
+const comboSeat = await post('/api/demo/operator/waitlist', { op: 'seat', waitlistId: comboWait.data.waitlistId, tableCode: 'P3+P4' }, operatorToken);
+assert(comboSeat.status === 200 && comboSeat.data.ok && comboSeat.data.reference && comboSeat.data.tableCode === 'P3+P4' && comboSeat.data.tableCodes?.length === 2, 'combo waitlist seat failed', comboSeat);
+const comboList = await post('/api/demo/operator/list', {}, operatorToken);
+const comboBooking = comboList.data.bookings.find(b => b.reference === comboSeat.data.reference);
+assert(comboBooking?.tableCode === 'P3+P4' && comboBooking?.tableCodes?.includes('P3') && comboBooking?.tableCodes?.includes('P4'), 'operator list missing combined table assignment', comboList);
+evidence.push(['operator_table_combination', comboSeat.status, comboBooking.tableCode, comboBooking.tableCodes.join('+')]);
+
 const raceOpen = await findOpenDate(6, 'indoor', '17:00');
 const raceSlot = raceOpen.result.data.slots[0];
 const raceResults = await Promise.all(Array.from({ length: 5 }, (_, i) => post('/api/demo/hold', { date: raceSlot.date, time: raceSlot.time, partySize: 6, section: 'indoor', idempotencyKey: `race_${Date.now()}_${i}` })));
@@ -144,7 +155,11 @@ if (supabaseUrl && supabaseAnonKey) {
     headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
   });
   assert(directBlocks.status >= 400, 'anon key should not directly read reservation_demo.table_blocks', directBlocks.status);
-  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status]);
+  const directCombos = await fetch(`${supabaseUrl}/rest/v1/table_combinations?select=id&limit=1`, {
+    headers: { apikey: supabaseAnonKey, authorization: `Bearer ${supabaseAnonKey}`, accept: 'application/json', 'accept-profile': 'reservation_demo' }
+  });
+  assert(directCombos.status >= 400, 'anon key should not directly read reservation_demo.table_combinations', directCombos.status);
+  evidence.push(['direct_private_schema_read', direct.status, directWaitlist.status, directGuests.status, directBlocks.status, directCombos.status]);
 }
 
 console.log(JSON.stringify({ ok: true, base, evidence }, null, 2));

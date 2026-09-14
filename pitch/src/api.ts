@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, TableCombination, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -58,7 +58,7 @@ export async function operatorList(token: string) {
     request<OperatorState>('/api/demo/operator/list', {}, token),
     request<{ ok: boolean; waitlist: WaitlistEntry[]; error?: string }>('/api/demo/operator/waitlist', { op: 'list' }, token),
     request<{ ok: boolean; profiles: GuestProfile[]; error?: string }>('/api/demo/operator/guest', { op: 'list' }, token),
-    request<{ ok: boolean; tableBlocks: TableBlock[]; error?: string }>('/api/demo/operator/floor', { op: 'list' }, token)
+    request<{ ok: boolean; tableBlocks: TableBlock[]; tableCombinations: TableCombination[]; error?: string }>('/api/demo/operator/floor', { op: 'list' }, token)
   ]);
   const profilesByReference = new Map<string, GuestProfile>();
   for (const profile of guests.profiles || []) {
@@ -75,7 +75,7 @@ export async function operatorList(token: string) {
       privateNotePreview: profile.privateNote ? 'Private note' : ''
     } : booking;
   });
-  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [] };
+  return { ...state, bookings, waitlist: waitlist.waitlist || [], profiles: guests.profiles || [], tableBlocks: floor.tableBlocks || [], tableCombinations: floor.tableCombinations || state.tableCombinations || [] };
 }
 
 export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
@@ -91,7 +91,7 @@ export function operatorFloor(token: string, input:
   | { op: 'block'; tableCode: string; date: string; startTime?: string; endTime?: string; reason?: string }
   | { op: 'clear'; blockId: string }
 ) {
-  return request<{ ok: boolean; tableBlock?: TableBlock; tableBlocks?: TableBlock[]; error?: string }>('/api/demo/operator/floor', input, token);
+  return request<{ ok: boolean; tableBlock?: TableBlock; tableBlocks?: TableBlock[]; tableCombinations?: TableCombination[]; error?: string }>('/api/demo/operator/floor', input, token);
 }
 
 export function operatorGuest(token: string, input:

@@ -203,6 +203,36 @@ test('operator can add, notify, and seat a walk-in from the Wait rail', async ({
   await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
 });
 
+test('operator can seat an 8 top with a combined patio table setup', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Wait$/i }).click();
+  await page.getByLabel('Waitlist guest name').fill('Combo Eight Test');
+  await page.getByLabel('Waitlist requested time').fill('19:30');
+  await page.getByLabel('Waitlist party size').selectOption('8');
+  await page.getByLabel('Waitlist seating preference').selectOption('outdoor');
+  await page.getByLabel('Quoted wait minutes').fill('30');
+  await page.getByLabel('Waitlist note').fill('Needs combined patio tables.');
+  await page.getByRole('button', { name: /add to waitlist/i }).click();
+
+  const waitRow = page.locator('.waitlist-row').filter({ hasText: 'Combo Eight Test' });
+  await expect(waitRow).toBeVisible();
+  await waitRow.getByRole('button', { name: /seat from floor/i }).click();
+  await page.getByRole('button', { name: /^Combine tables$/i }).click();
+  await expect(page.getByText(/Choose a combination below/i)).toBeVisible();
+  await expect(page.getByLabel('Table combinations')).toContainText('P3+P4');
+  await page.getByRole('button', { name: /Seat selected party at combined tables P3\+P4/i }).click();
+
+  await expect(page.getByText(/Seated waitlist party DEMO-[A-Z0-9]+ at tables P3\+P4/i)).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/8 guests · outdoor · table P3\+P4/i);
+  await expect(page.getByRole('button', { name: /Table P3, 4 seats, seated, 8 guests/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Table P4, 4 seats, seated, 8 guests/i })).toBeVisible();
+});
+
 
 test('operator can load and update a guestbook profile on the iPad', async ({ page, request }) => {
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');

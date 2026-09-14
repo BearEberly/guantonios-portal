@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorReset, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, ReservationSummary, SeatingSection, TableBlock, TableCombination, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -428,7 +428,7 @@ function OperatorPage() {
   const [movingReference, setMovingReference] = useState<string | null>(null);
   const [dragTargetTable, setDragTargetTable] = useState<string | null>(null);
   const [operatorMode, setOperatorMode] = useState<'floor' | 'timeline' | 'availability'>('floor');
-  const [floorAction, setFloorAction] = useState<'seat' | 'block'>('seat');
+  const [floorAction, setFloorAction] = useState<'seat' | 'block' | 'combine'>('seat');
   const [tableBlockReason, setTableBlockReason] = useState('Blocked from the iPad floor.');
   const [blockBusy, setBlockBusy] = useState(false);
   const [activeRail, setActiveRail] = useState<OperatorRailSection>('Floor');
@@ -678,6 +678,7 @@ function OperatorPage() {
   const waitlist = state?.waitlist || [];
   const profiles = state?.profiles || [];
   const tableBlocks = state?.tableBlocks || [];
+  const tableCombinations = state?.tableCombinations || [];
   const notifications = state?.notifications || [];
   const fallbackServiceDate = `${nextBookableDate()}T19:30:00-07:00`;
   const serviceDate = bookings[0]?.startsAt || holds[0]?.startsAt || waitlist[0]?.startsAt || tableBlocks[0]?.startsAt || fallbackServiceDate;
@@ -735,7 +736,7 @@ function OperatorPage() {
     { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 17, w: 9, h: 31 },
     { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 56, w: 9, h: 31 }
   ] as const;
-  const bookingsByTable = new Map(activeBookings.filter(booking => booking.tableCode).map(booking => [booking.tableCode!, booking]));
+  const bookingsByTable = new Map(activeBookings.flatMap(booking => (booking.tableCodes?.length ? booking.tableCodes : booking.tableCode ? [booking.tableCode] : []).map(code => [code, booking] as const)));
   const tableBlocksByTable = new Map(tableBlocks.filter(block => block.status === 'active').map(block => [block.tableCode, block]));
   const queueMatches = (booking: ReservationSummary & { tableCode?: string; createdAt?: string }) => {
     if (queueFilter === 'Notify' || queueFilter === 'Waitlist') return false;
@@ -753,7 +754,7 @@ function OperatorPage() {
   const searchMatches = (booking: ReservationSummary & { tableCode?: string }) => {
     const query = queueSearch.trim().toLowerCase();
     if (!query) return true;
-    return [booking.reference, booking.guestLabel || 'Demo Guest', booking.section, booking.tableCode || '', formatLocalTime(booking.startsAt)]
+    return [booking.reference, booking.guestLabel || 'Demo Guest', booking.section, booking.tableCode || '', ...(booking.tableCodes || []), formatLocalTime(booking.startsAt)]
       .some(value => value.toLowerCase().includes(query));
   };
   const visibleBookings = bookings.filter(booking => queueMatches(booking) && partyMatches(booking) && searchMatches(booking));
@@ -794,7 +795,7 @@ function OperatorPage() {
   const timelineGridTemplate = `96px repeat(${timeSlots.length}, minmax(76px, 1fr))`;
   const railItems: Array<{ icon: string; label: OperatorRailSection; count: number }> = [
     { icon: 'book', label: 'Book', count: bookedCount },
-    { icon: 'floor', label: 'Floor', count: activeBookings.length + tableBlocks.length },
+    { icon: 'floor', label: 'Floor', count: activeBookings.length + tableBlocks.length + tableCombinations.length },
     { icon: 'wait', label: 'Wait', count: waitlistCount },
     { icon: 'guest', label: 'Guests', count: profiles.length },
     { icon: 'reports', label: 'Reports', count: previewCount }
@@ -804,7 +805,8 @@ function OperatorPage() {
   const timelineTableCodes = new Set(floorTables.map(table => table.code));
   const timelineBookingsByTable = new Map<string, typeof timelineBookings>();
   timelineBookings.forEach(booking => {
-    const key = booking.tableCode && timelineTableCodes.has(booking.tableCode) ? booking.tableCode : `${booking.section}-unassigned`;
+    const firstTableCode = (booking.tableCodes || []).find(code => timelineTableCodes.has(code));
+    const key = firstTableCode || (booking.tableCode && timelineTableCodes.has(booking.tableCode) ? booking.tableCode : `${booking.section}-unassigned`);
     timelineBookingsByTable.set(key, [...(timelineBookingsByTable.get(key) || []), booking]);
   });
   const timelineLocalKey = (value: string) => new Intl.DateTimeFormat('en-GB', {
@@ -924,6 +926,15 @@ function OperatorPage() {
   const canSeatBookingAtTable = (booking: ReservationSummary | null | undefined, table: (typeof floorTables)[number]) => Boolean(booking && canMoveBooking(booking) && booking.partySize <= table.seats);
   const canSeatWaitlistAtTable = (entry: WaitlistEntry | null | undefined, table: (typeof floorTables)[number]) => Boolean(entry && ['waiting', 'notified'].includes(entry.status) && entry.partySize <= table.seats && (!entry.section || entry.section === (table.section === 'Patio' ? 'outdoor' : 'indoor')));
   const canSeatAtTable = (table: (typeof floorTables)[number]) => moveCandidate ? canSeatBookingAtTable(moveCandidate, table) : canSeatWaitlistAtTable(waitlistSeatCandidate, table);
+  const canSeatBookingAtCombination = (booking: ReservationSummary | null | undefined, combination: TableCombination) => Boolean(booking && canMoveBooking(booking) && booking.partySize >= combination.minParty && booking.partySize <= combination.maxParty);
+  const canSeatWaitlistAtCombination = (entry: WaitlistEntry | null | undefined, combination: TableCombination) => Boolean(entry && ['waiting', 'notified'].includes(entry.status) && entry.partySize >= combination.minParty && entry.partySize <= combination.maxParty && (!entry.section || entry.section === combination.section));
+  const canSeatAtCombination = (combination: TableCombination) => moveCandidate ? canSeatBookingAtCombination(moveCandidate, combination) : canSeatWaitlistAtCombination(waitlistSeatCandidate, combination);
+  const combinationStatus = (combination: TableCombination) => {
+    const blocked = combination.tableCodes.map(code => tableBlocksByTable.get(code)).find(Boolean) || null;
+    const occupied = combination.tableCodes.map(code => bookingsByTable.get(code)).find(booking => booking && booking.reference !== moveCandidate?.reference) || null;
+    const selectedAlreadyThere = Boolean(moveCandidate && combination.tableCodes.every(code => bookingsByTable.get(code)?.reference === moveCandidate.reference));
+    return { blocked, occupied, selectedAlreadyThere, open: !blocked && !occupied };
+  };
 
   function beginMoveMode(booking: ReservationSummary) {
     selectReservation(booking.reference);
@@ -1000,8 +1011,92 @@ function OperatorPage() {
     if (updated && fromDrag) setStatus(`Dropped ${booking.reference} at table ${table.code}.`);
   }
 
+  async function seatBookingAtCombination(booking: ReservationSummary, combination: TableCombination) {
+    const state = combinationStatus(combination);
+    if (state.blocked) {
+      setStatus(`Table ${state.blocked.tableCode} is blocked: ${state.blocked.reason}. Clear the block before combining.`);
+      return;
+    }
+    if (state.occupied) {
+      selectReservation(state.occupied.reference);
+      setStatus(`Combination ${combination.code} includes occupied table ${state.occupied.tableCode || combination.code}.`);
+      return;
+    }
+    if (!canSeatBookingAtCombination(booking, combination)) {
+      setStatus(`${combination.code} fits ${combination.minParty}-${combination.maxParty}; select a different combination for ${booking.partySize} guests.`);
+      return;
+    }
+    setMovingReference(null);
+    const updated = await setBookingStatus(booking.reference, 'seated', combination.code);
+    if (updated) setStatus(`Combined tables ${combination.code} for ${booking.reference}.`);
+  }
+
+  async function seatWaitlistAtCombination(entry: WaitlistEntry, combination: TableCombination) {
+    const state = combinationStatus(combination);
+    if (state.blocked) {
+      setStatus(`Table ${state.blocked.tableCode} is blocked: ${state.blocked.reason}. Clear the block before combining.`);
+      return;
+    }
+    if (state.occupied) {
+      selectReservation(state.occupied.reference);
+      setStatus(`Combination ${combination.code} includes an occupied table.`);
+      return;
+    }
+    if (!canSeatWaitlistAtCombination(entry, combination)) {
+      setStatus(`${combination.code} fits ${combination.minParty}-${combination.maxParty}; choose a different combination for ${entry.partySize}.`);
+      return;
+    }
+    setWaitBusy(true);
+    try {
+      const result = await operatorWaitlist(token, { op: 'seat', waitlistId: entry.id, tableCode: combination.code });
+      if (!result.ok || !result.reference) throw new Error(result.error || 'Waitlist seating failed');
+      await operatorGuest(token, {
+        op: 'attach',
+        reference: result.reference,
+        guestLabel: entry.guestLabel,
+        contact: normalizeDemoMobile(entry.contact || ''),
+        tags: ['Walk-in'],
+        preferences: [combination.section],
+        privateNote: entry.note || 'Seated at combined tables from the iPad waitlist.'
+      });
+      selectReservation(result.reference);
+      setQueueFilter('Seated');
+      setActiveRail('Floor');
+      await load(undefined, `Seated waitlist party ${result.reference} at tables ${combination.code}.`);
+    } catch (error) {
+      setStatus(`Waitlist seating failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+    } finally {
+      setWaitBusy(false);
+    }
+  }
+
+  async function seatSelectedAtCombination(combination: TableCombination) {
+    if (moveCandidate) {
+      await seatBookingAtCombination(moveCandidate, combination);
+      return;
+    }
+    if (waitlistSeatCandidate) {
+      await seatWaitlistAtCombination(waitlistSeatCandidate, combination);
+      return;
+    }
+    setStatus(`Select a booked party or waitlist party before combining ${combination.code}.`);
+  }
+
   async function handleTableTap(table: (typeof floorTables)[number]) {
     const tableBlock = tableBlocksByTable.get(table.code);
+    if (floorAction === 'combine') {
+      const matches = tableCombinations.filter(combo => combo.tableCodes.includes(table.code));
+      if (matches.length === 1) {
+        await seatSelectedAtCombination(matches[0]);
+        return;
+      }
+      if (matches.length > 1) {
+        setStatus(`Table ${table.code} belongs to ${matches.map(combo => combo.code).join(', ')}. Choose the combination card on the right.`);
+        return;
+      }
+      setStatus(`Table ${table.code} has no configured combination.`);
+      return;
+    }
     if (floorAction === 'block') {
       if (tableBlock) {
         setStatus(`Table ${table.code} is already blocked: ${tableBlock.reason}.`);
@@ -1148,6 +1243,7 @@ function OperatorPage() {
               <article><span>Waitlist</span><strong>{waitlistCount}</strong></article>
               <article><span>Profiles</span><strong>{profiles.length}</strong></article>
               <article><span>Blocks</span><strong>{tableBlocks.length}</strong></article>
+              <article><span>Combos</span><strong>{tableCombinations.length}</strong></article>
               <article><span>Text previews</span><strong>{previewCount}</strong></article>
             </section>
             <section className="resyos-workbench">
@@ -1398,12 +1494,13 @@ function OperatorPage() {
                             const blockable = !booking && !tableBlock && floorAction === 'block';
                             const dropReady = assignable && Boolean(activeSeatCandidate);
                             const dragOver = dragTargetTable === table.code;
+                            const comboMember = floorAction === 'combine' && tableCombinations.some(combo => combo.tableCodes.includes(table.code));
                             const tooSmall = !booking && !tableBlock && Boolean(activeSeatCandidate && activeSeatCandidate.partySize > table.seats);
                             return (
                               <button
                                 type="button"
                                 key={table.code}
-                                className={`floor-table ${table.shape} ${tileStatus} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                className={`floor-table ${table.shape} ${tileStatus} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                 style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
                                 onClick={() => handleTableTap(table)}
                                 onDragOver={event => tableDragOver(event, table)}
@@ -1413,7 +1510,7 @@ function OperatorPage() {
                                 aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : tableBlock ? `, blocked, ${tableBlock.reason}` : assignable ? `, open, drop ${moveCandidate?.reference || selectedWaitlistEntry?.guestLabel || 'selected party'} here` : floorAction === 'block' ? ', open, block this table' : ', open'}`}
                               >
                                 <strong>{table.code}</strong>
-                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? 'Blocked' : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : `${table.seats}p`}</span>
+                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? 'Blocked' : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
                               </button>
                             );
                           })}
@@ -1579,10 +1676,12 @@ function OperatorPage() {
                 <div className="floor-control-card" aria-label="Floor table controls">
                   <div className="side-actions floor-control-actions">
                     <button type="button" aria-pressed={floorAction === 'seat'} disabled={blockBusy} onClick={() => setFloorAction('seat')}>Seat mode</button>
+                    <button type="button" aria-pressed={floorAction === 'combine'} disabled={blockBusy} onClick={() => { setFloorAction(floorAction === 'combine' ? 'seat' : 'combine'); setMovingReference(null); }}>Combine tables</button>
                     <button type="button" aria-pressed={floorAction === 'block'} disabled={blockBusy} onClick={() => { setFloorAction(floorAction === 'block' ? 'seat' : 'block'); setMovingReference(null); }}>Block table</button>
                   </div>
                   <label>Block note<input value={tableBlockReason} onChange={event => setTableBlockReason(event.target.value)} maxLength={110} aria-label="Table block reason" /></label>
                   {floorAction === 'block' && <p className="move-hint">Tap an open table to block it for this dinner service.</p>}
+                  {floorAction === 'combine' && <p className="move-hint">Choose a combination below, or tap a highlighted member table to find its combinations.</p>}
                 </div>
               </section>
               {selectedBooking && (
@@ -1644,6 +1743,25 @@ function OperatorPage() {
                   </div>
                 </section>
               )}
+              <section aria-labelledby="table-combinations-title" className="table-combo-list" aria-label="Table combinations">
+                <h2 id="table-combinations-title">Table combinations</h2>
+                {tableCombinations.length === 0 ? <p>No table combinations configured.</p> : tableCombinations.map(combo => {
+                  const state = combinationStatus(combo);
+                  const fits = canSeatAtCombination(combo);
+                  const disabled = busy || waitBusy || !activeSeatCandidate || !fits || !state.open;
+                  const reason = state.blocked ? `Blocked by table ${state.blocked.tableCode}` : state.occupied ? `Occupied by ${state.occupied.reference}` : !activeSeatCandidate ? 'Select a party first' : !fits ? `Fits ${combo.minParty}-${combo.maxParty}` : 'Ready';
+                  return (
+                    <article key={combo.id} className={`combo-card ${state.open ? 'open' : 'unavailable'} ${fits ? 'fits' : ''}`}>
+                      <div>
+                        <strong>{combo.code}</strong>
+                        <span>{combo.section} · {combo.minParty}-{combo.maxParty} guests</span>
+                        <p>{combo.tableCodes.join(' + ')}</p>
+                      </div>
+                      <button type="button" disabled={disabled} onClick={() => seatSelectedAtCombination(combo)} aria-label={`Seat selected party at combined tables ${combo.code}`}>{reason === 'Ready' ? 'Seat combo' : reason}</button>
+                    </article>
+                  );
+                })}
+              </section>
               <section aria-labelledby="table-blocks-title" className="table-block-list">
                 <h2 id="table-blocks-title">Table blocks</h2>
                 {tableBlocks.length === 0 ? <p>No active table blocks.</p> : tableBlocks.map(block => (

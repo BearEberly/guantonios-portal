@@ -34,6 +34,8 @@ export interface ReservationSummary {
   endsAt: string;
   guestLabel?: string;
   guestProfileId?: string;
+  tableCode?: string | null;
+  tableCodes?: string[];
   guestTags?: string[];
   guestPreferences?: string[];
   visitCount?: number;
@@ -80,6 +82,19 @@ export interface GuestProfile {
   visits: GuestVisit[];
 }
 
+export interface TableCombination {
+  id: string;
+  code: string;
+  section: SeatingSection;
+  minParty: number;
+  maxParty: number;
+  capacity: number;
+  tableCodes: string[];
+  displayOrder: number;
+  active: boolean;
+  updatedAt?: string;
+}
+
 export interface TableBlock {
   id: string;
   tableCode: string;
@@ -123,6 +138,7 @@ export interface OperatorState {
   waitlist: WaitlistEntry[];
   profiles: GuestProfile[];
   tableBlocks: TableBlock[];
+  tableCombinations: TableCombination[];
   notifications: Array<{ eventType: string; status: string; adapter: string; preview: Record<string, unknown>; createdAt: string }>;
   error?: string;
 }
