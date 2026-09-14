@@ -464,81 +464,173 @@ function OperatorPage() {
   }
 
   const bookings = state?.bookings || [];
-  const activeCount = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status)).length;
+  const holds = state?.holds || [];
+  const notifications = state?.notifications || [];
+  const serviceDate = bookings[0]?.startsAt || holds[0]?.startsAt || new Date().toISOString();
+  const activeBookings = bookings.filter(booking => !['cancelled', 'completed'].includes(booking.status));
+  const activeCount = activeBookings.reduce((total, booking) => total + booking.partySize, 0);
+  const bookedCount = bookings.filter(booking => booking.status === 'confirmed').length;
   const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
   const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
-  const previewCount = state?.notifications.length || 0;
+  const previewCount = notifications.length;
+  const selectedBooking = activeBookings[0] || bookings[0] || null;
+  const tableCodes = ['12','14','21','22','31','32','33','34','35','36','37','38','39','40','41','42','P1','P2','P3','P4','P5','P6','B1','B2'];
+  const bookingsByTable = new Map(bookings.map((booking, index) => [booking.tableCode || tableCodes[index % tableCodes.length], booking]));
+  const railGroups = [
+    { label: 'Notify', count: previewCount, active: false },
+    { label: 'Waitlist', count: holds.length, active: false },
+    { label: 'Booked', count: bookedCount, active: true },
+    { label: 'Seated', count: seatedCount, active: false },
+    { label: 'Done', count: bookings.filter(booking => booking.status === 'completed').length, active: false },
+    { label: 'No-show', count: bookings.filter(booking => booking.status === 'cancelled').length, active: false }
+  ];
+  const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
+  const sectionNames = ['Dining Room', 'Patio'];
 
   return (
     <main className="operator-page">
-      <section className="operator-login">
-        <div>
-          <p className="demo-tag operator-demo-tag">iPad operator demo</p>
-          <h1>Tonight's demo service</h1>
-          <p>Protected view for check-in, seating rehearsal, cancellation, and unsent notification preview.</p>
-        </div>
-        <form onSubmit={load}>
-          <label>Operator passcode<input type="password" value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></label>
-          <button type="submit" disabled={busy}>{busy ? 'Loading...' : 'Open operator view'}</button>
-        </form>
-      </section>
-      <p className="operator-status" role="status">{status}</p>
-      {state && (
+      {!state && (
         <>
+          <section className="operator-login">
+            <div>
+              <p className="demo-tag operator-demo-tag">iPad operator demo</p>
+              <h1>Tonight's demo service</h1>
+              <p>Protected view for check-in, seating rehearsal, cancellation, waitlist holds, and disabled notification preview.</p>
+            </div>
+            <form onSubmit={load}>
+              <label>Operator passcode<input type="password" value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></label>
+              <button type="submit" disabled={busy}>{busy ? 'Loading...' : 'Open operator view'}</button>
+            </form>
+          </section>
+          <p className="operator-status" role="status">{status}</p>
+        </>
+      )}
+      {state && (
+        <section className="resyos-shell" aria-label="ResyOS style service console">
+          <h1 className="sr-only">Tonight's demo service</h1>
+          <header className="resyos-topbar">
+            <div className="resyos-venue">
+              <button type="button" aria-label="Open service menu"><span aria-hidden="true">▦</span></button>
+              <strong>Guantonio's</strong>
+              <span>Lodi service</span>
+            </div>
+            <div className="resyos-date-controls" aria-label="Date and shift controls">
+              <button type="button" aria-label="Previous service">‹</button>
+              <span>{new Date(serviceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+              <button type="button" aria-label="Open date picker">▣</button>
+              <strong>Dinner</strong>
+              <button type="button" aria-label="Next service">›</button>
+            </div>
+            <div className="resyos-mode-controls" aria-label="View controls">
+              <button type="button">Floor</button>
+              <button type="button">Timeline</button>
+              <button type="button" onClick={resetDemo} disabled={busy}>Reset</button>
+            </div>
+            <p className="resyos-live-status" role="status">{status}</p>
+          </header>
+          <div className="resyos-party-row" aria-label="Party size filters">
+            <span>Party Size</span>
+            {[1, 2, 3, 4, 5, 6, '7+'].map(size => <button type="button" key={size}>{size}</button>)}
+            <p>Group By: <strong>Floor Plan</strong></p>
+          </div>
           <section className="service-strip" aria-label="Service summary">
-            <article><span>Covers active</span><strong>{activeCount}</strong></article>
+            <article><span>Dine-in covers</span><strong>{activeCount}</strong></article>
+            <article><span>Booked</span><strong>{bookedCount}</strong></article>
             <article><span>Checked in</span><strong>{checkInCount}</strong></article>
             <article><span>Seated</span><strong>{seatedCount}</strong></article>
             <article><span>Text previews</span><strong>{previewCount}</strong></article>
           </section>
-          <section className="operator-grid">
-            <div className="operator-list">
-              <div className="section-heading">
-                <div>
-                  <h2>Reservations</h2>
-                  <p>Live synthetic book, change, cancel, and check-in queue.</p>
-                </div>
-                <button type="button" onClick={resetDemo} disabled={busy}>Reset demo data</button>
+          <section className="resyos-workbench">
+            <aside className="resyos-left-rail" aria-label="Guest queues">
+              <div className="queue-search" aria-label="Guest search preview">Search guest or reference</div>
+              <div className="queue-tabs" aria-label="Reservation queues">
+                {railGroups.map(group => (
+                  <button type="button" key={group.label} className={group.active ? 'active' : ''}>
+                    <span>{group.label}</span>
+                    <strong>{group.count}</strong>
+                  </button>
+                ))}
               </div>
-              {bookings.length === 0 && <p>No synthetic bookings yet.</p>}
-              {bookings.map(booking => (
-                <article key={booking.reference} className={`operator-row ${booking.status}`}>
-                  <div className="operator-guest">
-                    <strong>{booking.guestLabel || 'Demo Guest'}</strong>
-                    <span>{booking.reference}</span>
+              <div className="operator-list">
+                <div className="section-heading">
+                  <div>
+                    <h2>Reservations</h2>
+                    <p>Live synthetic book, change, cancel, and check-in queue.</p>
                   </div>
-                  <div className="operator-time">
-                    <strong>{formatLocalTime(booking.startsAt)}</strong>
-                    <span>{booking.partySize} guests · {booking.section} · table {booking.tableCode || 'pending'}</span>
-                  </div>
-                  <span className="status-pill">{statusLabel(booking.status)}</span>
-                  <div className="operator-actions">
-                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'checked_in')}>Check in</button>
-                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'seated')}>Seat</button>
-                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'completed')}>Finish</button>
-                    <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'cancelled')}>Cancel</button>
-                  </div>
-                </article>
-              ))}
-            </div>
-            <aside className="floor-panel">
+                </div>
+                {bookings.length === 0 && <p>No synthetic bookings yet.</p>}
+                {bookings.map(booking => (
+                  <article key={booking.reference} className={`operator-row ${booking.status}`}>
+                    <div className="operator-guest">
+                      <strong>{booking.guestLabel || 'Demo Guest'}</strong>
+                      <span>{booking.reference}</span>
+                    </div>
+                    <div className="operator-time">
+                      <strong>{formatLocalTime(booking.startsAt)}</strong>
+                      <span>{booking.partySize} guests · {booking.section} · table {booking.tableCode || 'pending'}</span>
+                    </div>
+                    <span className="status-pill">{statusLabel(booking.status)}</span>
+                    <div className="operator-actions">
+                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'checked_in')}>Check in</button>
+                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'seated')}>Seat</button>
+                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'completed')}>Finish</button>
+                      <button disabled={busy} onClick={() => setBookingStatus(booking.reference, 'cancelled')}>Cancel</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </aside>
+            <section className="resyos-floor-stage" aria-label="Floor plan timeline">
+              <div className="timeline-head" aria-label="Service timeline">
+                {timeSlots.map(slot => <span key={slot}>{slot}</span>)}
+              </div>
+              <div className="floor-plan-panel">
+                {sectionNames.map(sectionName => (
+                  <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
+                    <h2>{sectionName}</h2>
+                    <div className="floor-map" aria-label={`${sectionName} synthetic floor map`}>
+                      {tableCodes.slice(sectionName === 'Dining Room' ? 0 : 16, sectionName === 'Dining Room' ? 16 : 24).map((code, index) => {
+                        const booking = bookingsByTable.get(code);
+                        const tileStatus = booking ? booking.status : index % 7 === 0 ? 'blocked' : 'open';
+                        return (
+                          <button type="button" key={code} className={`floor-table ${tileStatus}`} aria-label={`Table ${code}${booking ? `, ${statusLabel(booking.status)}` : ', open'}`}>
+                            <strong>{code}</strong>
+                            <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : '00'}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+                {selectedBooking && (
+                  <aside className={`guest-popover ${selectedBooking.status}`} aria-label="Selected reservation preview">
+                    <span>{formatLocalTime(selectedBooking.startsAt)}</span>
+                    <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
+                    <p>{selectedBooking.partySize} guests · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                  </aside>
+                )}
+              </div>
+              <footer className="cover-ticker" aria-label="Dine-in cover pacing">
+                <strong>{activeCount} DINE-IN COVERS</strong>
+                {timeSlots.map((slot, index) => <span key={slot}>{Math.max(0, activeCount - index)}/10<small>{slot}</small></span>)}
+              </footer>
+            </section>
+            <aside className="floor-panel resyos-side-panel" tabIndex={0} aria-label="Service details">
               <section aria-labelledby="floor-title">
                 <h2 id="floor-title">Floor snapshot</h2>
-                <div className="floor-map" aria-label="Synthetic floor map">
-                  {['12','14','21','22','31','P1','P2','P3'].map((code, index) => <span key={code} className={index < activeCount ? 'occupied' : ''}>{code}</span>)}
-                </div>
+                <p>Color states mirror the service queue: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
               </section>
               <section aria-labelledby="holds-title">
                 <h2 id="holds-title">Recent holds</h2>
-                {state.holds.length === 0 ? <p>No open demo holds.</p> : state.holds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
+                {holds.length === 0 ? <p>No open demo holds.</p> : holds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
               </section>
               <section aria-labelledby="notifications-title">
                 <h2 id="notifications-title">Disabled notification adapter</h2>
-                {state.notifications.length === 0 ? <p>No previews yet.</p> : state.notifications.slice(0, 3).map((n, i) => <p key={`${n.createdAt}-${i}`}>{n.eventType}: {n.status}</p>)}
+                {notifications.length === 0 ? <p>No previews yet.</p> : notifications.slice(0, 3).map((n, i) => <p key={`${n.createdAt}-${i}`}>{n.eventType}: {n.status}</p>)}
               </section>
             </aside>
           </section>
-        </>
+        </section>
       )}
     </main>
   );
