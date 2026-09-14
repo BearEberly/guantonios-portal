@@ -28,3 +28,7 @@ The operator passcode is intentionally not committed to Git and should not be pa
 7. Use `Reset demo data` before a new pitch run.
 
 The reset action clears only synthetic demo rows in the private `reservation_demo` Supabase schema, including Notify requests, and reseeds sample dates and tables.
+
+## Timed table availability blocks
+
+The Floor rail can block one table for a specific service window. Set `Floor time`, `Block from`, `Until`, and `Block note`, tap `Block table`, then tap the open table on the floor. The floor map shows the block for the selected service window, and the Timeline view shows the timed block across the matching table row. Clear active blocks from the `Table blocks` section in the right panel.
