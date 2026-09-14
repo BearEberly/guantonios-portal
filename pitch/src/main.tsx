@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { cancelReservation, changeReservation, confirmReservation, createHold, operatorList, operatorReset, operatorStatus, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, HoldResult, OperatorState, ReservationSummary, SeatingSection } from './types';
+import type { AvailabilitySlot, BookingResult, HoldResult, OperatorState, ReservationSummary, SeatingSection } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -423,8 +423,12 @@ function OperatorPage() {
   const [status, setStatus] = useState('Enter the protected demo operator passcode.');
   const [busy, setBusy] = useState(false);
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
+  const [operatorMode, setOperatorMode] = useState<'floor' | 'timeline' | 'availability'>('floor');
+  const [queueFilter, setQueueFilter] = useState('All');
+  const [partySizeFilter, setPartySizeFilter] = useState<number | '7+' | null>(null);
+  const [queueSearch, setQueueSearch] = useState('');
 
-  async function load(event?: FormEvent) {
+  async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
     event?.preventDefault();
     setBusy(true);
     try {
@@ -432,7 +436,7 @@ function OperatorPage() {
       if (!result.ok) throw new Error(result.error || 'Unauthorized');
       sessionStorage.setItem('demoOperatorToken', token);
       setState(result);
-      setStatus('Operator view loaded from Supabase demo data.');
+      setStatus(loadedStatus);
     } catch (error) {
       setStatus(`Operator access failed: ${error instanceof Error ? error.message : 'Check passcode.'}`);
     } finally {
@@ -440,11 +444,16 @@ function OperatorPage() {
     }
   }
 
-  async function setBookingStatus(reference: string, nextStatus: string) {
+  async function setBookingStatus(reference: string, nextStatus: string, tableCode?: string) {
     setBusy(true);
     try {
-      await operatorStatus(token, reference, nextStatus);
-      await load();
+      const result = await operatorStatus(token, reference, nextStatus, tableCode);
+      if (!result.ok) throw new Error(result.error || 'Operator update failed');
+      setSelectedReference(reference);
+      if (nextStatus === 'seated') setQueueFilter('Seated');
+      if (nextStatus === 'completed') setQueueFilter('Done');
+      if (nextStatus === 'cancelled') setQueueFilter('No-show');
+      await load(undefined, tableCode ? `Seated ${reference} at table ${tableCode}.` : `Updated ${reference} to ${statusLabel(nextStatus)}.`);
     } catch (error) {
       setStatus(`Update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
       setBusy(false);
@@ -456,8 +465,9 @@ function OperatorPage() {
     setBusy(true);
     try {
       await operatorReset(token);
-      await load();
-      setStatus('Synthetic demo data reset.');
+      setSelectedReference(null);
+      setQueueFilter('All');
+      await load(undefined, 'Synthetic demo data reset.');
     } catch (error) {
       setStatus(`Reset failed: ${error instanceof Error ? error.message : 'Try again.'}`);
       setBusy(false);
@@ -501,18 +511,75 @@ function OperatorPage() {
     { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 17, w: 9, h: 31 },
     { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 56, w: 9, h: 31 }
   ] as const;
-  const tableCodes = floorTables.map(table => table.code);
-  const bookingsByTable = new Map(bookings.map((booking, index) => [booking.tableCode || tableCodes[index % tableCodes.length], booking]));
+  const bookingsByTable = new Map(activeBookings.filter(booking => booking.tableCode).map(booking => [booking.tableCode!, booking]));
+  const queueMatches = (booking: ReservationSummary & { tableCode?: string; createdAt?: string }) => {
+    if (queueFilter === 'Notify' || queueFilter === 'Waitlist') return false;
+    if (queueFilter === 'Booked') return booking.status === 'confirmed';
+    if (queueFilter === 'Seated') return booking.status === 'seated';
+    if (queueFilter === 'Done') return booking.status === 'completed';
+    if (queueFilter === 'No-show') return booking.status === 'cancelled';
+    return true;
+  };
+  const partyMatches = (booking: ReservationSummary) => {
+    if (!partySizeFilter) return true;
+    if (partySizeFilter === '7+') return booking.partySize >= 7;
+    return booking.partySize === partySizeFilter;
+  };
+  const searchMatches = (booking: ReservationSummary & { tableCode?: string }) => {
+    const query = queueSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [booking.reference, booking.guestLabel || 'Demo Guest', booking.section, booking.tableCode || '', formatLocalTime(booking.startsAt)]
+      .some(value => value.toLowerCase().includes(query));
+  };
+  const visibleBookings = bookings.filter(booking => queueMatches(booking) && partyMatches(booking) && searchMatches(booking));
+  const visibleActiveCovers = visibleBookings.filter(booking => !['cancelled', 'completed'].includes(booking.status)).reduce((total, booking) => total + booking.partySize, 0);
+  const visibleHolds = queueFilter === 'Waitlist' ? holds : [];
+  const visibleNotifications = queueFilter === 'Notify' ? notifications : [];
   const railGroups = [
-    { label: 'Notify', count: previewCount, active: false },
-    { label: 'Waitlist', count: holds.length, active: false },
-    { label: 'Booked', count: bookedCount, active: true },
-    { label: 'Seated', count: seatedCount, active: false },
-    { label: 'Done', count: bookings.filter(booking => booking.status === 'completed').length, active: false },
-    { label: 'No-show', count: bookings.filter(booking => booking.status === 'cancelled').length, active: false }
+    { label: 'All', count: bookings.length },
+    { label: 'Notify', count: previewCount },
+    { label: 'Waitlist', count: holds.length },
+    { label: 'Booked', count: bookedCount },
+    { label: 'Seated', count: seatedCount },
+    { label: 'Done', count: bookings.filter(booking => booking.status === 'completed').length },
+    { label: 'No-show', count: bookings.filter(booking => booking.status === 'cancelled').length }
   ];
   const timeSlots = ['5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00'];
   const sectionNames = ['Dining Room', 'Patio'];
+  const timelineBookings = [...visibleBookings].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const capacityBySlot = timeSlots.map((slot, index) => {
+    const slotHour = 17 + Math.floor(index / 2);
+    const slotMinute = index % 2 === 0 ? '00' : '30';
+    const slotTime = `${String(slotHour).padStart(2, '0')}:${slotMinute}`;
+    const covers = bookings
+      .filter(booking => !['cancelled', 'completed'].includes(booking.status))
+      .filter(booking => new Date(booking.startsAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'America/Los_Angeles' }) === slotTime)
+      .reduce((total, booking) => total + booking.partySize, 0);
+    return { slot, covers, remaining: Math.max(0, 10 - covers) };
+  });
+  const selectedPartyCanMove = Boolean(selectedBooking && !['cancelled', 'completed'].includes(selectedBooking.status));
+  const canSeatAtTable = (table: (typeof floorTables)[number]) => Boolean(selectedBooking && selectedPartyCanMove && selectedBooking.partySize <= table.seats);
+  async function seatSelectedAtTable(table: (typeof floorTables)[number]) {
+    const tableBooking = bookingsByTable.get(table.code);
+    if (tableBooking && tableBooking.reference !== selectedBooking?.reference) {
+      setSelectedReference(tableBooking.reference);
+      setStatus(`Selected ${tableBooking.reference} at table ${table.code}.`);
+      return;
+    }
+    if (!selectedBooking) {
+      setStatus(`Table ${table.code} is open. Select a party first.`);
+      return;
+    }
+    if (!selectedPartyCanMove) {
+      setStatus(`${selectedBooking.reference} is ${statusLabel(selectedBooking.status)} and cannot be seated.`);
+      return;
+    }
+    if (!canSeatAtTable(table)) {
+      setStatus(`Table ${table.code} only seats ${table.seats}; select a larger table for ${selectedBooking.partySize} guests.`);
+      return;
+    }
+    await setBookingStatus(selectedBooking.reference, 'seated', table.code);
+  }
 
   return (
     <main className="operator-page">
@@ -569,16 +636,28 @@ function OperatorPage() {
                 <button type="button" aria-label="Next service">›</button>
               </div>
               <div className="resyos-mode-controls" aria-label="View controls">
-                <button type="button">Floor</button>
-                <button type="button">Timeline</button>
-                <button type="button">Availability</button>
+                {(['floor', 'timeline', 'availability'] as const).map(mode => (
+                  <button type="button" key={mode} className={operatorMode === mode ? 'active' : ''} aria-pressed={operatorMode === mode} onClick={() => setOperatorMode(mode)}>
+                    {mode === 'floor' ? 'Floor' : mode === 'timeline' ? 'Timeline' : 'Availability'}
+                  </button>
+                ))}
               </div>
               <p className="resyos-live-status" role="status">{status}</p>
             </header>
             <div className="resyos-party-row" aria-label="Party size filters">
               <span>Party Size</span>
-              {[1, 2, 3, 4, 5, 6, '7+'].map(size => <button type="button" key={size}>{size}</button>)}
-              <p>Group By: <strong>Floor Plan</strong></p>
+              {[1, 2, 3, 4, 5, 6, '7+'].map(size => (
+                <button
+                  type="button"
+                  key={size}
+                  className={partySizeFilter === size ? 'active' : ''}
+                  aria-pressed={partySizeFilter === size}
+                  onClick={() => setPartySizeFilter(partySizeFilter === size ? null : (size as number | '7+'))}
+                >
+                  {size}
+                </button>
+              ))}
+              <p>{partySizeFilter ? `Showing ${partySizeFilter} tops` : 'Group By'}: <strong>Floor Plan</strong></p>
             </div>
             <section className="service-strip" aria-label="Service summary">
               <article><span>Dine-in covers</span><strong>{activeCount}</strong></article>
@@ -589,10 +668,13 @@ function OperatorPage() {
             </section>
             <section className="resyos-workbench">
               <aside className="resyos-left-rail" aria-label="Guest queues">
-              <div className="queue-search" aria-label="Guest search preview">Search guest or reference</div>
+              <label className="queue-search">
+                <span className="sr-only">Search guest or reference</span>
+                <input value={queueSearch} onChange={event => setQueueSearch(event.target.value)} placeholder="Search guest or reference" aria-label="Search guest or reference" />
+              </label>
               <div className="queue-tabs" aria-label="Reservation queues">
                 {railGroups.map(group => (
-                  <button type="button" key={group.label} className={group.active ? 'active' : ''}>
+                  <button type="button" key={group.label} className={queueFilter === group.label ? 'active' : ''} aria-pressed={queueFilter === group.label} onClick={() => setQueueFilter(group.label)}>
                     <span>{group.label}</span>
                     <strong>{group.count}</strong>
                   </button>
@@ -602,11 +684,40 @@ function OperatorPage() {
                 <div className="section-heading">
                   <div>
                     <h2>Reservations</h2>
-                    <p>Live synthetic book, change, cancel, and check-in queue.</p>
+                    <p>{queueFilter} queue · {visibleBookings.length + visibleHolds.length + visibleNotifications.length} visible · {visibleActiveCovers} active covers.</p>
                   </div>
                 </div>
-                {bookings.length === 0 && <p>No synthetic bookings yet.</p>}
-                {bookings.map(booking => (
+                {bookings.length === 0 && queueFilter !== 'Waitlist' && queueFilter !== 'Notify' && <p>No synthetic bookings yet.</p>}
+                {queueFilter === 'Waitlist' && visibleHolds.length === 0 && <p>No open demo holds.</p>}
+                {queueFilter === 'Notify' && visibleNotifications.length === 0 && <p>No notification previews yet.</p>}
+                {bookings.length > 0 && queueFilter !== 'Waitlist' && queueFilter !== 'Notify' && visibleBookings.length === 0 && <p>No parties match this queue, party size, or search.</p>}
+                {visibleHolds.map(hold => (
+                  <article key={hold.id} className="operator-row hold-row">
+                    <div className="operator-guest">
+                      <strong>{hold.partySize} top hold</strong>
+                      <span>{hold.id.slice(0, 8)}</span>
+                    </div>
+                    <div className="operator-time">
+                      <strong>{formatLocalTime(hold.startsAt)}</strong>
+                      <span>{hold.section} · {statusLabel(hold.status)} · expires {formatLocalTime(hold.expiresAt)}</span>
+                    </div>
+                    <span className="status-pill">{statusLabel(hold.status)}</span>
+                  </article>
+                ))}
+                {visibleNotifications.map((notification, index) => (
+                  <article key={`${notification.createdAt}-${index}`} className="operator-row notification-row">
+                    <div className="operator-guest">
+                      <strong>{notification.eventType}</strong>
+                      <span>{notification.adapter}</span>
+                    </div>
+                    <div className="operator-time">
+                      <strong>{statusLabel(notification.status)}</strong>
+                      <span>{formatLocalTime(notification.createdAt)} · preview only</span>
+                    </div>
+                    <span className="status-pill">{statusLabel(notification.status)}</span>
+                  </article>
+                ))}
+                {visibleBookings.map(booking => (
                   <article key={booking.reference} className={`operator-row ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}>
                     <button type="button" className="operator-row-select" onClick={() => setSelectedReference(booking.reference)} aria-label={`Select ${booking.guestLabel || 'Demo Guest'} ${booking.reference}`}>
                       <span className="sr-only">Select reservation</span>
@@ -644,44 +755,83 @@ function OperatorPage() {
                   </span>
                 ))}
               </div>
-              <div className="floor-plan-panel">
-                {sectionNames.map(sectionName => (
-                  <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
-                    <div className="floor-section-head">
-                      <h2>{sectionName}</h2>
-                      <span>{sectionName === 'Dining Room' ? 'Host stand · dining room · bar' : 'Patio rail · counter'}</span>
+              <div className={`floor-plan-panel mode-${operatorMode}`}>
+                {operatorMode === 'floor' && (
+                  <>
+                    {sectionNames.map(sectionName => (
+                      <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
+                        <div className="floor-section-head">
+                          <h2>{sectionName}</h2>
+                          <span>{sectionName === 'Dining Room' ? 'Host stand · dining room · bar' : 'Patio rail · counter'}</span>
+                        </div>
+                        <div className={`floor-map floor-map-${sectionName === 'Dining Room' ? 'dining' : 'patio'}`} aria-label={`${sectionName} synthetic floor map`}>
+                          <span className="floor-landmark host">Host</span>
+                          <span className="floor-landmark kitchen">{sectionName === 'Dining Room' ? 'Kitchen' : 'Gate'}</span>
+                          <span className="floor-landmark bar">{sectionName === 'Dining Room' ? 'Pizza oven' : 'Bar'}</span>
+                          {floorTables.filter(table => table.section === sectionName).map(table => {
+                            const booking = bookingsByTable.get(table.code);
+                            const tileStatus = booking ? booking.status : 'open';
+                            const assignable = !booking && canSeatAtTable(table);
+                            const tooSmall = !booking && Boolean(selectedBooking && selectedPartyCanMove && selectedBooking.partySize > table.seats);
+                            return (
+                              <button
+                                type="button"
+                                key={table.code}
+                                className={`floor-table ${table.shape} ${tileStatus} ${assignable ? 'assignable' : ''} ${tooSmall ? 'too-small' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
+                                onClick={() => seatSelectedAtTable(table)}
+                                aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
+                                aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : assignable ? `, open, tap to seat ${selectedBooking?.reference}` : ', open'}`}
+                              >
+                                <strong>{table.code}</strong>
+                                <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : assignable ? 'Seat here' : `${table.seats}p`}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                    {selectedBooking && (
+                      <aside className={`guest-popover ${selectedBooking.status}`} aria-label="Selected reservation preview">
+                        <span>{formatLocalTime(selectedBooking.startsAt)}</span>
+                        <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
+                        <p>{selectedBooking.partySize} guests · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                      </aside>
+                    )}
+                  </>
+                )}
+                {operatorMode === 'timeline' && (
+                  <section className="operator-timeline-board" aria-label="Reservation timeline board">
+                    <div className="timeline-board-head">
+                      <h2>Timeline</h2>
+                      <span>{timelineBookings.length} visible parties</span>
                     </div>
-                    <div className={`floor-map floor-map-${sectionName === 'Dining Room' ? 'dining' : 'patio'}`} aria-label={`${sectionName} synthetic floor map`}>
-                      <span className="floor-landmark host">Host</span>
-                      <span className="floor-landmark kitchen">{sectionName === 'Dining Room' ? 'Kitchen' : 'Gate'}</span>
-                      <span className="floor-landmark bar">{sectionName === 'Dining Room' ? 'Pizza oven' : 'Bar'}</span>
-                      {floorTables.filter(table => table.section === sectionName).map((table, index) => {
-                        const booking = bookingsByTable.get(table.code);
-                        const tileStatus = booking ? booking.status : index % 9 === 0 ? 'blocked' : 'open';
-                        return (
-                          <button
-                            type="button"
-                            key={table.code}
-                            className={`floor-table ${table.shape} ${tileStatus} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
-                            style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
-                            onClick={() => booking && setSelectedReference(booking.reference)}
-                            aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
-                            aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : ', open'}`}
-                          >
-                            <strong>{table.code}</strong>
-                            <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : `${table.seats}p`}</span>
-                          </button>
-                        );
-                      })}
+                    {timelineBookings.length === 0 && <p>No parties match the current filters.</p>}
+                    {timelineBookings.map(booking => (
+                      <button type="button" key={booking.reference} className={`timeline-party ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`} onClick={() => setSelectedReference(booking.reference)}>
+                        <span>{formatLocalTime(booking.startsAt)}</span>
+                        <strong>{booking.guestLabel || 'Demo Guest'}</strong>
+                        <em>{booking.partySize} · table {booking.tableCode || 'pending'} · {statusLabel(booking.status)}</em>
+                      </button>
+                    ))}
+                  </section>
+                )}
+                {operatorMode === 'availability' && (
+                  <section className="availability-board" aria-label="Availability by service time">
+                    <div className="timeline-board-head">
+                      <h2>Availability</h2>
+                      <span>Demo capacity by half hour</span>
+                    </div>
+                    <div className="availability-grid">
+                      {capacityBySlot.map(slot => (
+                        <article key={slot.slot} className={slot.remaining === 0 ? 'full' : ''}>
+                          <span>{slot.slot}</span>
+                          <strong>{slot.remaining}</strong>
+                          <small>{slot.covers}/10 covers</small>
+                        </article>
+                      ))}
                     </div>
                   </section>
-                ))}
-                {selectedBooking && (
-                  <aside className={`guest-popover ${selectedBooking.status}`} aria-label="Selected reservation preview">
-                    <span>{formatLocalTime(selectedBooking.startsAt)}</span>
-                    <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
-                    <p>{selectedBooking.partySize} guests · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
-                  </aside>
                 )}
               </div>
               <footer className="cover-ticker" aria-label="Dine-in cover pacing">

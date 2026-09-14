@@ -57,8 +57,8 @@ export function operatorList(token: string) {
   return request<OperatorState>('/api/demo/operator/list', {}, token);
 }
 
-export function operatorStatus(token: string, reference: string, status: string) {
-  return request<{ ok: boolean; reference: string; status: string; error?: string }>('/api/demo/operator/status', { reference, status }, token);
+export function operatorStatus(token: string, reference: string, status: string, tableCode?: string) {
+  return request<{ ok: boolean; reference: string; status: string; tableCode?: string; error?: string }>('/api/demo/operator/status', { reference, status, ...(tableCode ? { tableCode } : {}) }, token);
 }
 
 export function operatorReset(token: string) {

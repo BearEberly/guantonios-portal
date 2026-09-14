@@ -75,6 +75,13 @@ const view = await post('/api/demo/view', { reference: confirm.data.reference, m
 assert(view.status === 200 && view.data.reservation.status === 'confirmed', 'view failed', view);
 evidence.push(['view', view.status, view.data.reservation.status]);
 
+const assignTable = await post('/api/demo/operator/status', { reference: confirm.data.reference, status: 'seated', tableCode: 'P1' }, operatorToken);
+assert(assignTable.status === 200 && assignTable.data.ok && assignTable.data.tableCode === 'P1', 'operator table assignment failed', assignTable);
+const assignedList = await post('/api/demo/operator/list', {}, operatorToken);
+const assignedBooking = assignedList.data.bookings.find(b => b.reference === confirm.data.reference);
+assert(assignedBooking?.status === 'seated' && assignedBooking?.tableCode === 'P1' && assignedBooking?.section === 'outdoor', 'operator list missing assigned table', assignedList);
+evidence.push(['operator_assign_table', assignTable.status, assignedBooking.tableCode, assignedBooking.status]);
+
 const change = await post('/api/demo/change', { reference: confirm.data.reference, manageToken: confirm.data.manageToken, date: open.date, time: '18:00', partySize: 2, section: 'outdoor' });
 assert(change.status === 200 && change.data.reservation.section === 'outdoor', 'change failed', change);
 evidence.push(['change', change.status, change.data.reservation.section]);

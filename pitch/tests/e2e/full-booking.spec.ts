@@ -30,3 +30,25 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await expect(page.getByText(reference)).toBeVisible();
   await expect(page.getByText(/disabled notification adapter/i)).toBeVisible();
 });
+
+test('operator can seat a selected party by tapping an open floor table', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: /^search$/i }).click();
+  await expect(page.getByRole('button', { name: /^Indoor$/i }).first()).toBeVisible();
+  await page.getByRole('button', { name: /^Indoor$/i }).first().click();
+  await page.getByRole('button', { name: /confirm demo reservation/i }).click();
+  await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
+  const reference = (await page.locator('.reference').innerText()).trim();
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await expect(page.getByText(reference)).toBeVisible();
+  await page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) }).click();
+  await page.getByRole('button', { name: /Table P1, 2 seats, open, tap to seat/i }).click();
+
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
+  await expect(page.getByText(/2 guests · outdoor · table P1 · Seated/i)).toBeVisible();
+});

@@ -34,7 +34,7 @@ export function envReady(env) {
   return Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY && env.DEMO_API_SECRET);
 }
 
-async function callSupabaseRpc(env, rpcName, body) {
+export async function callSupabaseRpc(env, rpcName, body) {
   if (!envReady(env)) return { ok: false, error: 'demo_environment_missing' };
   const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${rpcName}`, {
     method: 'POST',
@@ -61,6 +61,10 @@ export async function callDemoRpc(env, payload) {
   return callSupabaseRpc(env, 'reservation_demo_api', { payload, secret: env.DEMO_API_SECRET });
 }
 
+export async function callOperatorStatusRpc(env, payload) {
+  return callSupabaseRpc(env, 'reservation_demo_operator_status', { payload, secret: env.DEMO_API_SECRET });
+}
+
 export async function callResetRpc(env) {
   return callSupabaseRpc(env, 'reservation_demo_reset', { secret: env.DEMO_API_SECRET });
 }
@@ -82,9 +86,21 @@ export async function handleOperation(request, env, op, operator = false) {
   return json(result, result.ok ? 200 : mapStatus(result.error));
 }
 
+export async function handleOperatorStatus(request, env) {
+  const methodError = requirePost(request);
+  if (methodError) return methodError;
+  const originError = checkOrigin(request);
+  if (originError) return originError;
+  if (!operatorAllowed(request, env)) return json({ ok: false, error: 'operator_unauthorized' }, 401);
+  const body = await readJson(request);
+  if (!body || typeof body !== 'object') return json({ ok: false, error: 'invalid_json' }, 400);
+  const result = await callOperatorStatusRpc(env, { ...body, operator: true });
+  return json(result, result.ok ? 200 : mapStatus(result.error));
+}
+
 function mapStatus(error) {
   if (error === 'unauthorized' || error === 'operator_unauthorized' || error === 'not_found_or_unauthorized') return 401;
   if (error === 'demo_environment_missing') return 503;
-  if (error === 'slot_unavailable' || error === 'hold_expired_or_unauthorized') return 409;
+  if (error === 'slot_unavailable' || error === 'hold_expired_or_unauthorized' || error === 'table_unavailable') return 409;
   return 400;
 }
