@@ -28,6 +28,8 @@ test('guest can confirm, change, cancel, and operator can see the synthetic book
   await expect(page.getByText(reference)).toBeVisible();
   await expect(page.getByText(/disabled notification adapter/i)).toBeVisible();
   await page.goto(manageUrl);
+  await page.getByRole('button', { name: /load reservation/i }).click();
+  await expect(page.getByText(/reservation loaded/i)).toBeVisible();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: /cancel demo reservation/i }).click();
   await expect(page.getByText(/cancelled and capacity returned/i)).toBeVisible();
