@@ -795,7 +795,7 @@ function OperatorPage() {
                       <aside className={`guest-popover ${selectedBooking.status}`} aria-label="Selected reservation preview">
                         <span>{formatLocalTime(selectedBooking.startsAt)}</span>
                         <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
-                        <p>{selectedBooking.partySize} guests · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                        <p>{selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
                       </aside>
                     )}
                   </>
@@ -854,7 +854,7 @@ function OperatorPage() {
                 <section aria-labelledby="selected-party-title" className="selected-party-panel">
                   <h2 id="selected-party-title">Selected party</h2>
                   <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
-                  <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                  <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
                   <div className="side-actions">
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
