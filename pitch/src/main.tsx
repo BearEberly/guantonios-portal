@@ -1328,6 +1328,58 @@ function OperatorPage() {
   const selectedProfileTags = selectedBookingProfile?.tags?.length ? selectedBookingProfile.tags : selectedBooking?.guestTags || [];
   const selectedPrivateNote = selectedBookingProfile?.privateNote || selectedBooking?.privateNotePreview || '';
   const selectedRecentVisits = selectedBookingProfile?.visits?.slice(0, 3) || [];
+  const selectedBookingCreatedAt = selectedBooking ? (selectedBooking as ReservationSummary & { createdAt?: string }).createdAt : null;
+  const selectedActivityRows = selectedBooking ? [
+    {
+      key: 'service',
+      tone: selectedBooking.status === 'seated' ? 'service' : selectedBooking.status,
+      title: selectedBooking.status === 'seated' ? serviceStageLabel(selectedServiceStage) : statusLabel(selectedBooking.status),
+      meta: selectedBooking.serviceStageUpdatedAt ? `Updated ${formatLocalTime(selectedBooking.serviceStageUpdatedAt)}` : 'Current state',
+      detail: selectedBooking.status === 'seated' ? `${turnRiskLabel(selectedTurnRisk)} · ${selectedServiceAction?.label || 'Track course timing'}` : selectedServiceAction?.detail || 'No active service action.'
+    },
+    {
+      key: 'table',
+      tone: selectedTableCodes.length ? 'table' : 'attention',
+      title: selectedTableCodes.length ? `Table ${selectedDisplayTable}` : 'Needs table',
+      meta: selectedServer ? selectedServer.name : 'Floor',
+      detail: selectedTableCodes.length ? `${selectedServer ? `${selectedServer.station} · ` : ''}${selectedBooking.section === 'indoor' ? 'Dining room' : 'Patio'} assignment` : 'Seat from the floor map or Timeline.'
+    },
+    {
+      key: 'arrival',
+      tone: selectedArrivalState.key,
+      title: selectedArrivalState.label,
+      meta: 'Arrival',
+      detail: selectedArrivalState.detail
+    },
+    selectedBookingProfile ? {
+      key: 'profile',
+      tone: 'profile',
+      title: `${selectedBookingProfile.visitCount} ${selectedBookingProfile.visitCount === 1 ? 'visit' : 'visits'}`,
+      meta: 'Guest record',
+      detail: [...selectedProfileTags.slice(0, 2), ...selectedPreferenceTags.slice(0, 2)].join(' · ') || 'No saved tags or preferences.'
+    } : null,
+    (selectedBooking.operatorNote || selectedPrivateNote) ? {
+      key: 'note',
+      tone: 'note',
+      title: selectedBooking.operatorNote ? 'Host note' : 'Private note',
+      meta: 'Staff intel',
+      detail: selectedBooking.operatorNote || selectedPrivateNote
+    } : null,
+    {
+      key: 'booking',
+      tone: 'booking',
+      title: 'Reservation created',
+      meta: selectedBookingCreatedAt ? formatLocalTime(selectedBookingCreatedAt) : selectedServiceLabel,
+      detail: `${selectedBooking.reference} · ${selectedBooking.partySize} guests · ${formatLocalTime(selectedBooking.startsAt)}`
+    },
+    {
+      key: 'sync',
+      tone: syncStatusClass,
+      title: syncStatusLabel,
+      meta: lastSyncAtMs ? formatSyncTime(lastSyncAtMs) : 'Pending',
+      detail: syncStatusDetail
+    }
+  ].filter((row): row is { key: string; tone: string; title: string; meta: string; detail: string } => Boolean(row)) : [];
   const queueMatches = (booking: ReservationSummary & { tableCode?: string; createdAt?: string }) => {
     if (queueFilter === 'Notify' || queueFilter === 'Waitlist') return false;
     const arrivalState = arrivalStateForBooking(booking, operatorNowMs);
@@ -3281,6 +3333,25 @@ function OperatorPage() {
                     <button disabled={busy || !selectedCanFinish} onClick={() => setBookingStatus(selectedBooking.reference, 'completed')}>Finish</button>
                     <button className="danger" disabled={busy || !selectedCanCancel} onClick={() => setBookingStatus(selectedBooking.reference, 'cancelled')}>Cancel</button>
                     <button disabled={!selectedBookingProfile} onClick={() => selectedBookingProfile && selectGuestProfile(selectedBookingProfile)}>Open profile</button>
+                  </div>
+                  <div className="selected-activity-card" aria-label="Selected party activity timeline">
+                    <div className="selected-activity-head">
+                      <span>Activity timeline</span>
+                      <strong>{selectedActivityRows[0]?.title || 'No activity yet'}</strong>
+                      <p>Live host log assembled from reservation, floor, guest, service, and sync state.</p>
+                    </div>
+                    <div className="selected-activity-list">
+                      {selectedActivityRows.map(row => (
+                        <article key={row.key} className={`selected-activity-row activity-${row.tone}`}>
+                          <i aria-hidden="true" />
+                          <div>
+                            <span>{row.meta}</span>
+                            <strong>{row.title}</strong>
+                            <p>{row.detail}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
                   </div>
                 </section>
               )}

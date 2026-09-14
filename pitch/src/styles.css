@@ -3314,6 +3314,128 @@ button.timeline-cell:hover,
   line-height: 1.35;
 }
 
+.selected-activity-card {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  border: 1px solid #33404b;
+  border-radius: 10px;
+  padding: 10px;
+  background: linear-gradient(180deg, #152029 0%, #111920 100%);
+}
+
+.selected-activity-head {
+  display: grid;
+  gap: 3px;
+}
+
+.selected-activity-head span,
+.selected-activity-row span {
+  color: #9da8b2;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.selected-activity-head strong {
+  color: #f8fbff;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.selected-activity-head p,
+.selected-activity-row p {
+  margin: 0;
+  color: #c7d2dc;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.selected-activity-list {
+  display: grid;
+  gap: 7px;
+}
+
+.selected-activity-row {
+  display: grid;
+  grid-template-columns: 13px 1fr;
+  gap: 8px;
+  align-items: start;
+  min-height: 42px;
+}
+
+.selected-activity-row i {
+  position: relative;
+  display: block;
+  width: 13px;
+  min-height: 42px;
+}
+
+.selected-activity-row i::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 15px;
+  bottom: -8px;
+  width: 2px;
+  border-radius: 999px;
+  background: #34414c;
+}
+
+.selected-activity-row:last-child i::before {
+  display: none;
+}
+
+.selected-activity-row i::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #18232c;
+  border-radius: 999px;
+  background: #8f9ba6;
+  box-shadow: 0 0 0 1px #33404b;
+}
+
+.selected-activity-row div {
+  display: grid;
+  gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid #2b3742;
+  border-radius: 8px;
+  background: rgba(10, 16, 22, .55);
+}
+
+.selected-activity-row strong {
+  color: #f8fbff;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.selected-activity-row.activity-booking i::after { background: #45b8e8; }
+.selected-activity-row.activity-arrived i::after,
+.selected-activity-row.activity-due i::after,
+.selected-activity-row.activity-seated i::after,
+.selected-activity-row.activity-table i::after { background: #ff9536; }
+.selected-activity-row.activity-service i::after,
+.selected-activity-row.activity-profile i::after,
+.selected-activity-row.activity-early i::after,
+.selected-activity-row.activity-done i::after,
+.selected-activity-row.activity-confirmed i::after,
+.selected-activity-row.activity-checked_in i::after,
+.selected-activity-row.activity-completed i::after { background: #57c98f; }
+.selected-activity-row.activity-note i::after { background: #f2c261; }
+.selected-activity-row.activity-error i::after,
+.selected-activity-row.activity-attention i::after,
+.selected-activity-row.activity-cancelled i::after,
+.selected-activity-row.activity-late i::after { background: #cf4b48; }
+.selected-activity-row.activity-saving i::after,
+.selected-activity-row.activity-idle i::after { background: #9b7af4; }
+
 .guest-intel-card {
   display: grid;
   gap: 8px;

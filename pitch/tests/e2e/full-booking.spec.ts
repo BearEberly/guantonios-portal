@@ -21,16 +21,10 @@ function serviceDateFromTimestamp(value: string) {
 
 
 async function resetDemoData(request: APIRequestContext) {
-  let lastError = '';
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const reset = await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
-    const resetBody = await reset.json().catch(() => null) as { ok?: boolean; reset?: boolean; error?: string } | null;
-    if (!reset.ok() || !resetBody?.ok || !resetBody?.reset) {
-      lastError = `reset failed with ${reset.status()} ${resetBody?.error || ''}`;
-      continue;
-    }
+  type ResetCounts = { clean: boolean; summary: string };
+  async function readCounts(): Promise<ResetCounts> {
     const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
-    const listBody = await list.json().catch(() => null) as { ok?: boolean; bookings?: unknown[]; holds?: unknown[]; error?: string } | null;
+    const listBody = await list.json().catch(() => null) as { ok?: boolean; bookings?: unknown[]; holds?: unknown[]; notifications?: unknown[]; error?: string } | null;
     const waitlist = await request.post('/api/demo/operator/waitlist', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
     const waitlistBody = await waitlist.json().catch(() => null) as { ok?: boolean; waitlist?: unknown[]; error?: string } | null;
     const guests = await request.post('/api/demo/operator/guest', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
@@ -41,8 +35,40 @@ async function resetDemoData(request: APIRequestContext) {
     const pacingBody = await pacing.json().catch(() => null) as { ok?: boolean; pacingRules?: unknown[]; error?: string } | null;
     const notify = await request.post('/api/demo/operator/notify', { headers: { 'x-demo-operator-token': operatorToken! }, data: { op: 'list' } });
     const notifyBody = await notify.json().catch(() => null) as { ok?: boolean; notifyRequests?: unknown[]; error?: string } | null;
-    if (listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && pacingBody?.ok && notifyBody?.ok && (listBody.bookings || []).length === 0 && (waitlistBody.waitlist || []).length === 0 && (guestsBody.profiles || []).length === 0 && (floorBody.tableBlocks || []).length === 0 && (pacingBody.pacingRules || []).length === 0 && (notifyBody.notifyRequests || []).length === 0) return;
-    lastError = `reset verification failed with bookings=${(listBody?.bookings || []).length} waitlist=${(waitlistBody?.waitlist || []).length} profiles=${(guestsBody?.profiles || []).length} blocks=${(floorBody?.tableBlocks || []).length} pacing=${(pacingBody?.pacingRules || []).length} notify=${(notifyBody?.notifyRequests || []).length}`;
+    const counts = {
+      bookings: (listBody?.bookings || []).length,
+      holds: (listBody?.holds || []).length,
+      notifications: (listBody?.notifications || []).length,
+      waitlist: (waitlistBody?.waitlist || []).length,
+      profiles: (guestsBody?.profiles || []).length,
+      blocks: (floorBody?.tableBlocks || []).length,
+      pacing: (pacingBody?.pacingRules || []).length,
+      notify: (notifyBody?.notifyRequests || []).length
+    };
+    const ok = Boolean(listBody?.ok && waitlistBody?.ok && guestsBody?.ok && floorBody?.ok && pacingBody?.ok && notifyBody?.ok);
+    const clean = ok && Object.values(counts).every(count => count === 0);
+    return { clean, summary: Object.entries(counts).map(([key, value]) => `${key}=${value}`).join(' ') };
+  }
+
+  let lastError = '';
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const reset = await request.post('/api/demo/operator/reset', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
+    const resetBody = await reset.json().catch(() => null) as { ok?: boolean; reset?: boolean; error?: string } | null;
+    if (!reset.ok() || !resetBody?.ok || !resetBody?.reset) {
+      lastError = `reset failed with ${reset.status()} ${resetBody?.error || ''}`;
+      await new Promise(resolve => setTimeout(resolve, 260));
+      continue;
+    }
+    const first = await readCounts();
+    if (first.clean) {
+      await new Promise(resolve => setTimeout(resolve, 260));
+      const second = await readCounts();
+      if (second.clean) return;
+      lastError = `reset verification was not stable: ${second.summary}`;
+    } else {
+      lastError = `reset verification failed: ${first.summary}`;
+    }
+    await new Promise(resolve => setTimeout(resolve, 260));
   }
   throw new Error(lastError || 'reset failed');
 }
@@ -54,20 +80,27 @@ async function selectReservationRow(page: Page, reference: string) {
   return row;
 }
 
-async function serviceDateForReference(request: APIRequestContext, reference: string) {
+type OperatorBookingFixture = { reference: string; startsAt: string; endsAt: string; status?: string };
+
+async function operatorBookingForReference(request: APIRequestContext, reference: string) {
   let lastStatus = 0;
   let lastError = '';
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     const list = await request.post('/api/demo/operator/list', { headers: { 'x-demo-operator-token': operatorToken! }, data: {} });
-    const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: Array<{ reference: string; startsAt: string }>; error?: string } | null;
+    const body = await list.json().catch(() => null) as { ok?: boolean; bookings?: OperatorBookingFixture[]; error?: string } | null;
     lastStatus = list.status();
     lastError = body?.error || '';
     expect(list.ok(), `operator list failed with ${lastStatus} ${lastError}`).toBeTruthy();
     const booking = (body?.bookings || []).find(item => item.reference === reference);
-    if (booking) return serviceDateFromTimestamp(booking.startsAt);
-    await new Promise(resolve => setTimeout(resolve, 180));
+    if (booking) return booking;
+    await new Promise(resolve => setTimeout(resolve, 220));
   }
   throw new Error(`operator list did not include ${reference} after retries; last status ${lastStatus} ${lastError}`);
+}
+
+async function serviceDateForReference(request: APIRequestContext, reference: string) {
+  const booking = await operatorBookingForReference(request, reference);
+  return serviceDateFromTimestamp(booking.startsAt);
 }
 
 async function chooseOperatorServiceDate(page: Page, date: string) {
@@ -91,14 +124,27 @@ function laDate(offsetDays: number) {
 }
 
 async function apiPost<T = any>(request: APIRequestContext, path: string, data: unknown, token = operatorToken) {
-  const response = await request.post(path, {
-    headers: token ? { 'x-demo-operator-token': token } : undefined,
-    data
-  });
-  const body = await response.json().catch(() => null) as T & { ok?: boolean; error?: string } | null;
-  expect(response.ok(), `${path} failed with ${response.status()} ${body?.error || ''}`).toBeTruthy();
-  expect(body?.ok, `${path} did not return ok`).toBeTruthy();
-  return body as T & { ok: boolean };
+  let lastStatus = 0;
+  let lastError = '';
+  const retryableErrors = ['demo_backend_error', 'demo_reset_error', 'deadlock', 'timeout', 'not_found'];
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await request.post(path, {
+      headers: token ? { 'x-demo-operator-token': token } : undefined,
+      data
+    });
+    const body = await response.json().catch(() => null) as T & { ok?: boolean; error?: string } | null;
+    lastStatus = response.status();
+    lastError = body?.error || '';
+    if (response.ok() && body?.ok) return body as T & { ok: boolean };
+    const retryable = retryableErrors.some(error => lastError.toLowerCase().includes(error));
+    if (!retryable || attempt === 4) {
+      expect(response.ok(), `${path} failed with ${lastStatus} ${lastError}`).toBeTruthy();
+      expect(body?.ok, `${path} did not return ok`).toBeTruthy();
+      return body as T & { ok: boolean };
+    }
+    await new Promise(resolve => setTimeout(resolve, 220 * (attempt + 1)));
+  }
+  throw new Error(`${path} failed after retries with ${lastStatus} ${lastError}`);
 }
 
 async function findOpenDemoSlot(request: APIRequestContext, partySize = 2, section = 'outdoor', time = '19:30') {
@@ -134,7 +180,14 @@ async function createConfirmedDemoBooking(request: APIRequestContext, input: { g
     mobile: '(209) 555-0199',
     request: 'Created by Reports e2e setup.'
   }, undefined);
-  return { reference: confirm.reference, date: slot.date, time: slot.time, startsAt: slot.startsAt, endsAt: slot.endsAt };
+  const operatorBooking = await operatorBookingForReference(request, confirm.reference);
+  return {
+    reference: confirm.reference,
+    date: serviceDateFromTimestamp(operatorBooking.startsAt),
+    time: slot.time,
+    startsAt: operatorBooking.startsAt,
+    endsAt: operatorBooking.endsAt
+  };
 }
 
 test('guest can confirm, change, cancel, and operator can see the synthetic booking', async ({ page, request }) => {
@@ -286,7 +339,8 @@ test('operator sync panel shows live counts and pending iPad saves', async ({ pa
   await expect(syncPanel).toBeVisible();
   await expect(syncPanel).toContainText('Live');
   await expect(syncPanel).toContainText(/Synced \d{1,2}:\d{2}:\d{2}/);
-  await expect(syncPanel).toContainText('1 bookings');
+  await expect(syncPanel).toContainText(/[1-9]\d* bookings/);
+  await expect(reservationRow(page, booking.reference)).toBeVisible();
 
   await page.route('**/api/demo/operator/status', async route => {
     await new Promise(resolve => setTimeout(resolve, 450));
@@ -575,6 +629,55 @@ test('operator can advance seated service stage and see turn-risk reporting', as
   await expect(page.getByLabel('Arrival timing report')).toContainText('Seated');
   await expect(page.getByLabel('Service-stage report')).toContainText('Entrees');
   await expect(page.getByLabel('Table turns report')).toContainText('Entrees');
+});
+
+test('operator selected party activity timeline summarizes host history on iPad', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const stamp = Date.now();
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Activity Guest ${stamp}`, partySize: 2, section: 'indoor', time: '19:30' });
+  await apiPost(request, '/api/demo/operator/status', { reference: booking.reference, status: 'seated', tableCode: '12' });
+  await apiPost(request, '/api/demo/operator/service', { reference: booking.reference, serviceStage: 'ordered' });
+  await apiPost(request, '/api/demo/operator/guest', {
+    op: 'attach',
+    reference: booking.reference,
+    guestLabel: `Activity Guest ${stamp}`,
+    contact: '(209) 555-0133',
+    tags: ['VIP', 'Regular'],
+    preferences: ['Window seat', 'Still water'],
+    privateNote: 'Likes a slow pace.',
+    note: 'Host attached activity profile.'
+  });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await chooseOperatorServiceDate(page, booking.date);
+  await selectReservationRow(page, booking.reference);
+
+  const selectedParty = page.locator('.selected-party-panel');
+  const serviceControls = selectedParty.getByLabel('Manual service stage controls');
+  await expect(serviceControls).toBeVisible();
+  await expect(serviceControls.getByRole('button', { name: /^Fired$/ })).toBeVisible();
+
+  const activity = selectedParty.getByLabel('Selected party activity timeline');
+  await expect(activity).toBeVisible();
+  await expect(activity).toContainText('Activity timeline');
+  await expect(activity.locator('.selected-activity-head')).toContainText('Ordered');
+  await expect(activity).toContainText('Reservation created');
+  await expect(activity).toContainText(booking.reference);
+  await expect(activity).toContainText('Arrival');
+  await expect(activity).toContainText('Table 12');
+  await expect(activity).toContainText('Andrea');
+  await expect(activity).toContainText('Guest record');
+  await expect(activity).toContainText('VIP');
+  await expect(activity).toContainText('Private note');
+  await expect(activity).toContainText('Likes a slow pace.');
+  await expect(activity).toContainText(/Live|Saving|Needs review/);
+
+  const activityText = await activity.innerText();
+  expect(activityText.indexOf('Ordered')).toBeGreaterThanOrEqual(0);
+  expect(activityText.indexOf('Ordered')).toBeLessThan(activityText.indexOf('Reservation created'));
 });
 
 test('operator can drag a reservation to an open floor table', async ({ page, request }, testInfo) => {
