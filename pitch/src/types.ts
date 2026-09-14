@@ -25,6 +25,9 @@ export interface HoldResult {
   error?: string;
 }
 
+export type ServiceStage = 'not_started' | 'ordered' | 'fired' | 'entrees' | 'dessert' | 'check_dropped' | 'paid';
+export type TurnRisk = 'not_seated' | 'on_pace' | 'approaching_turn' | 'over_turn' | 'ready_to_turn' | string;
+
 export interface ReservationSummary {
   reference: string;
   status: string;
@@ -36,6 +39,9 @@ export interface ReservationSummary {
   guestProfileId?: string;
   tableCode?: string | null;
   tableCodes?: string[];
+  serviceStage?: ServiceStage | string;
+  serviceStageUpdatedAt?: string | null;
+  turnRisk?: TurnRisk;
   guestTags?: string[];
   guestPreferences?: string[];
   visitCount?: number;

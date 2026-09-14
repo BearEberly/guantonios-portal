@@ -234,6 +234,37 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await expect(selectedParty).toContainText('Seated');
 });
 
+
+test('operator can advance seated service stage and see turn-risk reporting', async ({ page, request }) => {
+  test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');
+  await resetDemoData(request);
+  const booking = await createConfirmedDemoBooking(request, { guestLabel: `Stage Guest ${Date.now()}`, partySize: 2, section: 'outdoor', time: '19:30' });
+  await apiPost(request, '/api/demo/operator/status', { reference: booking.reference, status: 'seated', tableCode: 'P2' });
+
+  await page.goto('/operator');
+  await page.getByLabel(/operator passcode/i).fill(operatorToken!);
+  await page.getByRole('button', { name: /open operator view/i }).click();
+  await page.getByLabel('Choose service date').fill(booking.date);
+  await selectReservationRow(page, booking.reference);
+
+  const stageControls = page.getByLabel('Manual service stage controls');
+  await expect(stageControls).toBeVisible();
+  await expect(stageControls).toContainText('Not started');
+  await stageControls.getByRole('button', { name: /^Entrees$/ }).click();
+  await expect(page.getByText(new RegExp(`Updated ${escapeRegex(booking.reference)} service stage to Entrees`))).toBeVisible();
+  await expect(stageControls.getByRole('button', { name: /^Entrees$/ })).toHaveAttribute('aria-pressed', 'true');
+  const patioMap = page.getByLabel('Patio synthetic floor map');
+  const tableP2 = patioMap.getByRole('button', { name: /Table P2, 2 seats/i });
+  await expect(tableP2).toBeVisible();
+  await expect(tableP2.locator('em')).toContainText('Entrees');
+
+  await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
+  await expect(page.getByLabel('Reservation timeline board')).toContainText('Entrees');
+  await page.getByLabel('Operator sections').getByRole('button', { name: /^Reports$/i }).click();
+  await expect(page.getByLabel('Service-stage report')).toContainText('Entrees');
+  await expect(page.getByLabel('Table turns report')).toContainText('Entrees');
+});
+
 test('operator can drag a reservation to an open floor table', async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile-chromium', 'Mobile uses the tap Move table fallback; drag is verified on desktop and iPad.');
   test.skip(!operatorToken, 'DEMO_OPERATOR_TOKEN is required for protected operator verification');

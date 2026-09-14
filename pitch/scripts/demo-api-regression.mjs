@@ -89,12 +89,22 @@ const view = await post('/api/demo/view', { reference: confirm.data.reference, m
 assert(view.status === 200 && view.data.reservation.status === 'confirmed', 'view failed', view);
 evidence.push(['view', view.status, view.data.reservation.status]);
 
+const wrongServiceStage = await post('/api/demo/operator/service', { reference: confirm.data.reference, serviceStage: 'ordered' }, 'wrong-token');
+assert(wrongServiceStage.status === 401 && wrongServiceStage.data.error === 'operator_unauthorized', 'wrong token should reject service stage update', wrongServiceStage);
+const missingServiceStage = await post('/api/demo/operator/service', { reference: confirm.data.reference }, operatorToken);
+assert(missingServiceStage.status === 409 && missingServiceStage.data.error === 'invalid_service_stage', 'missing service stage should return validation error', missingServiceStage);
+const unseatedServiceStage = await post('/api/demo/operator/service', { reference: confirm.data.reference, serviceStage: 'ordered' }, operatorToken);
+assert(unseatedServiceStage.status === 409 && unseatedServiceStage.data.error === 'service_stage_unavailable', 'unseated booking should reject service stage update', unseatedServiceStage);
 const assignTable = await post('/api/demo/operator/status', { reference: confirm.data.reference, status: 'seated', tableCode: 'P1' }, operatorToken);
 assert(assignTable.status === 200 && assignTable.data.ok && assignTable.data.tableCode === 'P1', 'operator table assignment failed', assignTable);
+const serviceStage = await post('/api/demo/operator/service', { reference: confirm.data.reference, serviceStage: 'fired' }, operatorToken);
+assert(serviceStage.status === 200 && serviceStage.data.ok && serviceStage.data.serviceStage === 'fired', 'operator service stage update failed', serviceStage);
 const assignedList = await post('/api/demo/operator/list', {}, operatorToken);
 const assignedBooking = assignedList.data.bookings.find(b => b.reference === confirm.data.reference);
 assert(assignedBooking?.status === 'seated' && assignedBooking?.tableCode === 'P1' && assignedBooking?.section === 'outdoor', 'operator list missing assigned table', assignedList);
+assert(assignedBooking?.serviceStage === 'fired' && assignedBooking?.turnRisk, 'operator list missing service stage state', assignedList);
 evidence.push(['operator_assign_table', assignTable.status, assignedBooking.tableCode, assignedBooking.status]);
+evidence.push(['operator_service_stage', serviceStage.status, assignedBooking.serviceStage, assignedBooking.turnRisk]);
 
 const guestLoad = await post('/api/demo/operator/guest', { op: 'load', reference: confirm.data.reference }, operatorToken);
 assert(guestLoad.status === 200 && guestLoad.data.profile?.id && guestLoad.data.profile.visits.some(v => v.reference === confirm.data.reference), 'guest profile load failed', guestLoad);

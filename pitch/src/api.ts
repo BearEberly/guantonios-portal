@@ -1,4 +1,4 @@
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -102,6 +102,11 @@ export function operatorPacing(token: string, input:
   | { op: 'clear'; ruleId: string }
 ) {
   return request<{ ok: boolean; pacingRule?: PacingRule; pacingRules?: PacingRule[]; error?: string }>('/api/demo/operator/pacing', input, token);
+}
+
+
+export function operatorService(token: string, input: { reference: string; serviceStage: ServiceStage | string }) {
+  return request<{ ok: boolean; reference?: string; serviceStage?: ServiceStage | string; serviceStageUpdatedAt?: string | null; turnRisk?: string; error?: string }>('/api/demo/operator/service', input, token);
 }
 
 export function operatorGuest(token: string, input:

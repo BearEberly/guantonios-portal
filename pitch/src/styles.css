@@ -3501,3 +3501,121 @@ button.timeline-cell:hover,
 .service-strip {
   grid-template-columns: repeat(9, minmax(0, 1fr));
 }
+
+.floor-table em {
+  display: block;
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(17, 24, 32, .78);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.floor-table.risk-approaching_turn,
+.timeline-reservation-card.risk-approaching_turn {
+  box-shadow: inset 0 -5px 0 rgba(12, 18, 24, .12), 0 0 0 4px rgba(242, 194, 97, .28);
+}
+
+.floor-table.risk-over_turn,
+.timeline-reservation-card.risk-over_turn {
+  box-shadow: inset 0 -5px 0 rgba(12, 18, 24, .12), 0 0 0 4px rgba(207, 75, 72, .28);
+}
+
+.floor-table.risk-ready_to_turn,
+.timeline-reservation-card.risk-ready_to_turn {
+  box-shadow: inset 0 -5px 0 rgba(12, 18, 24, .12), 0 0 0 4px rgba(85, 179, 108, .28);
+}
+
+.service-stage-report {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.service-stage-report article {
+  padding: 9px;
+  border: 1px solid #2f3b45;
+  border-radius: 9px;
+  background: #111a22;
+}
+
+.service-stage-report strong {
+  display: block;
+  color: #f8fbff;
+  font-size: 12px;
+}
+
+.service-stage-report span {
+  color: #aeb9c3;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.turn-risk.risk-on_pace { color: #9be0ad; }
+.turn-risk.risk-approaching_turn { color: #f2c261; }
+.turn-risk.risk-over_turn { color: #ff8c89; }
+.turn-risk.risk-ready_to_turn { color: #9be0ad; }
+
+.service-stage-control {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #33404b;
+  border-radius: 10px;
+  background: #101922;
+}
+
+.service-stage-control > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.service-stage-control span {
+  color: #9da8b2;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.service-stage-control strong {
+  color: #f8fbff;
+  font-size: 14px;
+}
+
+.service-stage-control p {
+  margin: 0;
+  color: #c7d2dc;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.service-stage-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.service-stage-buttons button {
+  min-height: 34px;
+  border: 1px solid #41505d;
+  border-radius: 7px;
+  background: #25313c;
+  color: #eef5fb;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.service-stage-buttons button[aria-pressed="true"] {
+  background: #ff9536;
+  border-color: #ffb568;
+  color: #1c0f06;
+}

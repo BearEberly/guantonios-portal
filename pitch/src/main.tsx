@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorPacing, operatorReset, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
-import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, SmsReadiness, TableBlock, TableCombination, WaitlistEntry } from './types';
+import { cancelReservation, changeReservation, confirmReservation, createHold, operatorFloor, operatorGuest, operatorList, operatorPacing, operatorReset, operatorService, operatorSmsReadiness, operatorStatus, operatorWaitlist, searchAvailability, viewReservation } from './api';
+import type { AvailabilitySlot, BookingResult, GuestProfile, HoldResult, OperatorState, PacingRule, ReservationSummary, SeatingSection, ServiceStage, SmsReadiness, TableBlock, TableCombination, TurnRisk, WaitlistEntry } from './types';
 import { formatLocalDate, formatLocalTime, isoDateInLosAngeles, makeIdempotencyKey, nextBookableDate, statusLabel } from './utils';
 import './styles.css';
 import { SmsInfoPage } from './sms-info';
@@ -432,6 +432,49 @@ type AvailabilityMatrixRow = {
   pacingRule?: PacingRule | null;
 };
 
+type ServiceStageOption = { value: ServiceStage; label: string; shortLabel: string; nextCopy: string };
+const SERVICE_STAGE_OPTIONS: ServiceStageOption[] = [
+  { value: 'not_started', label: 'Not started', shortLabel: 'Start', nextCopy: 'Order has not been started.' },
+  { value: 'ordered', label: 'Ordered', shortLabel: 'Ordered', nextCopy: 'Order taken. Watch kitchen pacing.' },
+  { value: 'fired', label: 'Fired', shortLabel: 'Fired', nextCopy: 'Food fired. Check course timing.' },
+  { value: 'entrees', label: 'Entrees', shortLabel: 'Entrees', nextCopy: 'Entrees are on the table.' },
+  { value: 'dessert', label: 'Dessert', shortLabel: 'Dessert', nextCopy: 'Dessert or final course is underway.' },
+  { value: 'check_dropped', label: 'Check dropped', shortLabel: 'Check', nextCopy: 'Check is down. Prepare table turn.' },
+  { value: 'paid', label: 'Paid', shortLabel: 'Paid', nextCopy: 'Payment complete. Table is ready to finish.' }
+];
+
+function serviceStageLabel(stage?: string | null) {
+  return SERVICE_STAGE_OPTIONS.find(option => option.value === stage)?.label || 'Not started';
+}
+
+function serviceStageShortLabel(stage?: string | null) {
+  return SERVICE_STAGE_OPTIONS.find(option => option.value === stage)?.shortLabel || 'Start';
+}
+
+function serviceStageCopy(stage?: string | null) {
+  return SERVICE_STAGE_OPTIONS.find(option => option.value === stage)?.nextCopy || 'Order has not been started.';
+}
+
+function turnRiskForBooking(booking?: ReservationSummary | null): TurnRisk {
+  if (!booking || booking.status !== 'seated') return 'not_seated';
+  if (booking.turnRisk && booking.turnRisk !== 'not_seated') return booking.turnRisk;
+  if (booking.serviceStage === 'paid') return 'ready_to_turn';
+  const endTime = new Date(booking.endsAt).getTime();
+  if (Number.isNaN(endTime)) return 'on_pace';
+  const now = Date.now();
+  if (now >= endTime) return 'over_turn';
+  if (now >= endTime - 15 * 60 * 1000) return 'approaching_turn';
+  return 'on_pace';
+}
+
+function turnRiskLabel(risk?: string | null) {
+  if (risk === 'ready_to_turn') return 'Ready to turn';
+  if (risk === 'over_turn') return 'Over turn';
+  if (risk === 'approaching_turn') return 'Approaching turn';
+  if (risk === 'on_pace') return 'On pace';
+  return 'Not seated';
+}
+
 function dateKeyFromTimestamp(value: string) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Los_Angeles',
@@ -514,6 +557,7 @@ function OperatorPage() {
   const [profilePreferencesDraft, setProfilePreferencesDraft] = useState('');
   const [profileNoteDraft, setProfileNoteDraft] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
+  const [serviceBusy, setServiceBusy] = useState(false);
   const [profileDraftForId, setProfileDraftForId] = useState<string | null>(null);
 
   async function load(event?: FormEvent, loadedStatus = 'Operator view loaded from Supabase demo data.') {
@@ -566,6 +610,22 @@ function OperatorPage() {
       setStatus(`Update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
       setBusy(false);
       return false;
+    }
+  }
+
+  async function updateServiceStage(reference: string, nextStage: ServiceStage) {
+    setServiceBusy(true);
+    try {
+      const result = await operatorService(token, { reference, serviceStage: nextStage });
+      if (!result.ok) throw new Error(result.error || 'Service stage update failed');
+      selectReservation(reference);
+      await load(undefined, `Updated ${reference} service stage to ${serviceStageLabel(nextStage)}.`);
+      return true;
+    } catch (error) {
+      setStatus(`Service stage update failed: ${error instanceof Error ? error.message : 'Try again.'}`);
+      return false;
+    } finally {
+      setServiceBusy(false);
     }
   }
 
@@ -848,13 +908,15 @@ function OperatorPage() {
   const selectedDisplayTable = selectedBooking?.tableCode || (selectedTableCodes.length ? selectedTableCodes.join('+') : 'pending');
   const selectedTurnMinutes = selectedBooking ? Math.round(Math.max(0, new Date(selectedBooking.endsAt).getTime() - new Date(selectedBooking.startsAt).getTime()) / 60000) : 0;
   const selectedTableBlock = selectedTableCodes.map(code => tableBlocksByTable.get(code)).find(Boolean);
+  const selectedServiceStage = selectedBooking?.serviceStage || 'not_started';
+  const selectedTurnRisk = turnRiskForBooking(selectedBooking);
   const selectedServiceAction = selectedBooking ? (
     selectedBooking.status === 'confirmed'
       ? { label: 'Next: check in', detail: 'Greet the party, confirm guest notes, then check in before seating.' }
       : selectedBooking.status === 'checked_in'
         ? { label: 'Next: seat party', detail: selectedTableCodes.length ? `Seat at ${selectedDisplayTable} or move to another open table.` : 'Tap an open compatible table from the floor map.' }
         : selectedBooking.status === 'seated'
-          ? { label: 'Watch turn', detail: `${selectedTurnMinutes || 90} minute turn. Finish when the table is clear.` }
+          ? { label: serviceStageLabel(selectedServiceStage), detail: `${turnRiskLabel(selectedTurnRisk)}. ${serviceStageCopy(selectedServiceStage)}` }
           : selectedBooking.status === 'completed'
             ? { label: 'Turn complete', detail: 'Table is closed out for this synthetic service.' }
             : { label: 'No active action', detail: 'This party is cancelled or inactive.' }
@@ -1086,6 +1148,14 @@ function OperatorPage() {
     const state = slotData.remaining <= 0 ? 'full' : slotData.remaining <= 2 ? 'tight' : slotData.rule || slotData.covers > 0 ? 'paced' : 'open';
     const fill = slotData.limit > 0 ? Math.min(100, Math.round((slotData.covers / slotData.limit) * 100)) : 100;
     return { ...slotData, slot, state, fill };
+  });
+  const serviceStageReport = SERVICE_STAGE_OPTIONS.filter(option => option.value !== 'not_started').map(option => {
+    const parties = bookings.filter(booking => booking.status === 'seated' && booking.serviceStage === option.value);
+    return { ...option, parties: parties.length, covers: parties.reduce((total, booking) => total + booking.partySize, 0) };
+  });
+  const turnRiskReport = ['on_pace', 'approaching_turn', 'over_turn', 'ready_to_turn'].map(risk => {
+    const parties = activeBookings.filter(booking => turnRiskForBooking(booking) === risk);
+    return { risk, label: turnRiskLabel(risk), parties: parties.length, covers: parties.reduce((total, booking) => total + booking.partySize, 0) };
   });
   const busiestSlot = reportPacingRows.reduce((best, slot) => slot.covers > best.covers ? slot : best, reportPacingRows[0] || { slot: '5:00', covers: 0, limit: defaultPacingLimit, remaining: defaultPacingLimit, state: 'open', fill: 0, time: '17:00', rule: null });
   const pacingAlert = busiestSlot.remaining <= 0
@@ -1847,6 +1917,8 @@ function OperatorPage() {
                       {(booking.guestTags?.length ? booking.guestTags.slice(0, 2) : [booking.visitCount && booking.visitCount > 1 ? `${booking.visitCount} visits` : 'First visit']).map(tag => <span key={tag}>{tag}</span>)}
                       <span>{booking.section}</span>
                       <span>{booking.partySize} top</span>
+                      {booking.status === 'seated' && <span>{serviceStageShortLabel(booking.serviceStage)}</span>}
+                      {booking.status === 'seated' && <span>{turnRiskLabel(turnRiskForBooking(booking))}</span>}
                       {booking.privateNotePreview && <span>Private note</span>}
                     </div>
                     <span className="status-pill">{statusLabel(booking.status)}</span>
@@ -1897,7 +1969,7 @@ function OperatorPage() {
                               <button
                                 type="button"
                                 key={table.code}
-                                className={`floor-table ${table.shape} ${tileStatus} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                className={`floor-table ${table.shape} ${tileStatus} ${booking ? `service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)}` : ''} ${assignable ? 'assignable' : ''} ${blockable ? 'blockable' : ''} ${dropReady ? 'drop-ready' : ''} ${dragOver ? 'drag-over' : ''} ${tooSmall ? 'too-small' : ''} ${comboMember ? 'combo-member' : ''} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                 style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
                                 onClick={() => handleTableTap(table)}
                                 onDragOver={event => tableDragOver(event, table)}
@@ -1908,6 +1980,7 @@ function OperatorPage() {
                               >
                                 <strong>{table.code}</strong>
                                 <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : tableBlock ? 'Blocked' : assignable ? (movingReference ? 'Drop here' : 'Seat here') : blockable ? 'Block' : comboMember ? 'Combo' : `${table.seats}p`}</span>
+                                {booking && <em>{serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em>}
                               </button>
                             );
                           })}
@@ -1918,7 +1991,7 @@ function OperatorPage() {
                       <aside className={`guest-popover ${selectedBooking.status}`} aria-label="Selected reservation preview">
                         <span>{formatLocalTime(selectedBooking.startsAt)}</span>
                         <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
-                        <p>{selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                        <p>{selectedBooking.partySize} guests · {selectedBooking.section} · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)} · {serviceStageLabel(selectedBooking.serviceStage)}</p>
                       </aside>
                     )}
                     {selectedWaitlistEntry && (
@@ -1974,7 +2047,7 @@ function OperatorPage() {
                                       <button
                                         type="button"
                                         key={booking.reference}
-                                        className={`timeline-reservation-card ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                        className={`timeline-reservation-card ${booking.status} service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                         style={{ gridColumn: timelineGridColumn(booking) }}
                                         draggable={canMoveBooking(booking)}
                                         onDragStart={event => beginReservationDrag(event, booking)}
@@ -1984,7 +2057,7 @@ function OperatorPage() {
                                       >
                                         <span>{formatLocalTime(booking.startsAt)}</span>
                                         <strong>{booking.guestLabel || 'Demo Guest'}</strong>
-                                        <em>{booking.reference} · {booking.partySize} · {statusLabel(booking.status)}</em>
+                                        <em>{booking.reference} · {booking.partySize} · {statusLabel(booking.status)} · {serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em>
                                       </button>
                                     ))}
                                   </div>
@@ -2010,7 +2083,7 @@ function OperatorPage() {
                                     {timeSlots.map(slot => <span key={`${booking.reference}-${slot}`} className="timeline-cell" aria-hidden="true" />)}
                                     <button
                                       type="button"
-                                      className={`timeline-reservation-card ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                                      className={`timeline-reservation-card ${booking.status} service-${booking.serviceStage || 'not_started'} risk-${turnRiskForBooking(booking)} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
                                       style={{ gridColumn: timelineGridColumn(booking) }}
                                       draggable={canMoveBooking(booking)}
                                       onDragStart={event => beginReservationDrag(event, booking)}
@@ -2020,7 +2093,7 @@ function OperatorPage() {
                                     >
                                       <span>{formatLocalTime(booking.startsAt)}</span>
                                       <strong>{booking.guestLabel || 'Demo Guest'}</strong>
-                                      <em>{booking.reference} · {booking.partySize} · {statusLabel(booking.status)}</em>
+                                      <em>{booking.reference} · {booking.partySize} · {statusLabel(booking.status)} · {serviceStageShortLabel(booking.serviceStage)} · {turnRiskLabel(turnRiskForBooking(booking))}</em>
                                     </button>
                                   </div>
                                 ))}
@@ -2128,6 +2201,20 @@ function OperatorPage() {
                             </article>
                           ))}
                         </div>
+                        <div className="service-stage-report" aria-label="Service-stage report">
+                          {turnRiskReport.filter(row => row.parties > 0).map(row => (
+                            <article key={row.risk} className={`risk-${row.risk}`}>
+                              <strong>{row.label}</strong>
+                              <span>{row.covers} covers · {row.parties} parties</span>
+                            </article>
+                          ))}
+                          {serviceStageReport.filter(row => row.parties > 0).map(row => (
+                            <article key={row.value}>
+                              <strong>{row.label}</strong>
+                              <span>{row.covers} covers · {row.parties} parties</span>
+                            </article>
+                          ))}
+                        </div>
                       </section>
                     </div>
                     <section className="report-panel table-turn-panel" aria-label="Table turns report">
@@ -2141,8 +2228,8 @@ function OperatorPage() {
                             <strong>{booking.tableCode || 'Pending'}</strong>
                             <span>{booking.guestLabel || 'Demo Guest'} · {booking.reference} · {booking.partySize} guests</span>
                           </div>
-                          <em>{statusLabel(booking.status)}</em>
-                          <span>{formatLocalTime(booking.startsAt)} to {formatLocalTime(booking.endsAt)}</span>
+                          <em className={`turn-risk risk-${turnRiskForBooking(booking)}`}>{turnRiskLabel(turnRiskForBooking(booking))}</em>
+                          <span>{serviceStageLabel(booking.serviceStage)} · {formatLocalTime(booking.startsAt)} to {formatLocalTime(booking.endsAt)}</span>
                         </article>
                       ))}
                     </section>
@@ -2224,6 +2311,25 @@ function OperatorPage() {
                       <strong>{selectedTableBlock ? 'Blocked' : selectedTableCodes.length ? selectedDisplayTable : 'Unassigned'}</strong>
                       <p>{selectedTableBlock ? selectedTableBlock.reason : selectedTableCodes.length ? 'Assigned on the floor map.' : 'Seat from floor or timeline.'}</p>
                     </article>
+                  </div>
+                  <div className="service-stage-control" aria-label="Manual service stage controls">
+                    <div>
+                      <span>Manual service stage</span>
+                      <strong>{serviceStageLabel(selectedServiceStage)}</strong>
+                      <p>{turnRiskLabel(selectedTurnRisk)} · manual demo tracking, no POS sync.</p>
+                    </div>
+                    <div className="service-stage-buttons">
+                      {SERVICE_STAGE_OPTIONS.map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={selectedServiceStage === option.value}
+                          disabled={busy || serviceBusy || selectedBooking.status !== 'seated'}
+                          onClick={() => updateServiceStage(selectedBooking.reference, option.value)}
+                        >{option.shortLabel}</button>
+                      ))}
+                    </div>
+                    {selectedBooking.status !== 'seated' && <p className="move-hint">Seat the party before updating service stage.</p>}
                   </div>
                   <div className="side-actions">
                     <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
