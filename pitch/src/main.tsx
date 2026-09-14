@@ -422,6 +422,7 @@ function OperatorPage() {
   const [state, setState] = useState<OperatorState | null>(null);
   const [status, setStatus] = useState('Enter the protected demo operator passcode.');
   const [busy, setBusy] = useState(false);
+  const [selectedReference, setSelectedReference] = useState<string | null>(null);
 
   async function load(event?: FormEvent) {
     event?.preventDefault();
@@ -473,8 +474,34 @@ function OperatorPage() {
   const seatedCount = bookings.filter(booking => booking.status === 'seated').length;
   const checkInCount = bookings.filter(booking => booking.status === 'checked_in').length;
   const previewCount = notifications.length;
-  const selectedBooking = activeBookings[0] || bookings[0] || null;
-  const tableCodes = ['12','14','21','22','31','32','33','34','35','36','37','38','39','40','41','42','P1','P2','P3','P4','P5','P6','B1','B2'];
+  const selectedBooking = bookings.find(booking => booking.reference === selectedReference) || activeBookings[0] || bookings[0] || null;
+  const floorTables = [
+    { code: '12', section: 'Dining Room', seats: 2, shape: 'round', x: 11, y: 18, w: 12, h: 17 },
+    { code: '14', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 18, w: 13, h: 18 },
+    { code: '21', section: 'Dining Room', seats: 2, shape: 'square', x: 11, y: 47, w: 12, h: 17 },
+    { code: '22', section: 'Dining Room', seats: 2, shape: 'square', x: 27, y: 47, w: 12, h: 17 },
+    { code: '31', section: 'Dining Room', seats: 4, shape: 'booth', x: 47, y: 13, w: 14, h: 15 },
+    { code: '32', section: 'Dining Room', seats: 4, shape: 'booth', x: 65, y: 13, w: 14, h: 15 },
+    { code: '33', section: 'Dining Room', seats: 4, shape: 'booth', x: 47, y: 35, w: 14, h: 15 },
+    { code: '34', section: 'Dining Room', seats: 4, shape: 'booth', x: 65, y: 35, w: 14, h: 15 },
+    { code: '35', section: 'Dining Room', seats: 4, shape: 'booth', x: 47, y: 58, w: 14, h: 15 },
+    { code: '36', section: 'Dining Room', seats: 4, shape: 'booth', x: 65, y: 58, w: 14, h: 15 },
+    { code: '37', section: 'Dining Room', seats: 2, shape: 'square', x: 84, y: 20, w: 10, h: 15 },
+    { code: '38', section: 'Dining Room', seats: 2, shape: 'square', x: 84, y: 45, w: 10, h: 15 },
+    { code: '39', section: 'Dining Room', seats: 2, shape: 'square', x: 84, y: 70, w: 10, h: 15 },
+    { code: '40', section: 'Dining Room', seats: 4, shape: 'round', x: 11, y: 73, w: 12, h: 17 },
+    { code: '41', section: 'Dining Room', seats: 4, shape: 'round', x: 27, y: 73, w: 12, h: 17 },
+    { code: '42', section: 'Dining Room', seats: 6, shape: 'booth', x: 47, y: 80, w: 32, h: 12 },
+    { code: 'P1', section: 'Patio', seats: 2, shape: 'round', x: 10, y: 23, w: 12, h: 23 },
+    { code: 'P2', section: 'Patio', seats: 2, shape: 'round', x: 28, y: 23, w: 12, h: 23 },
+    { code: 'P3', section: 'Patio', seats: 4, shape: 'round', x: 46, y: 23, w: 13, h: 24 },
+    { code: 'P4', section: 'Patio', seats: 4, shape: 'round', x: 64, y: 23, w: 13, h: 24 },
+    { code: 'P5', section: 'Patio', seats: 4, shape: 'square', x: 20, y: 63, w: 18, h: 22 },
+    { code: 'P6', section: 'Patio', seats: 6, shape: 'square', x: 48, y: 63, w: 26, h: 22 },
+    { code: 'B1', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 17, w: 9, h: 31 },
+    { code: 'B2', section: 'Patio', seats: 1, shape: 'bar', x: 82, y: 56, w: 9, h: 31 }
+  ] as const;
+  const tableCodes = floorTables.map(table => table.code);
   const bookingsByTable = new Map(bookings.map((booking, index) => [booking.tableCode || tableCodes[index % tableCodes.length], booking]));
   const railGroups = [
     { label: 'Notify', count: previewCount, active: false },
@@ -508,40 +535,60 @@ function OperatorPage() {
       {state && (
         <section className="resyos-shell" aria-label="ResyOS style service console">
           <h1 className="sr-only">Tonight's demo service</h1>
-          <header className="resyos-topbar">
-            <div className="resyos-venue">
-              <button type="button" aria-label="Open service menu"><span aria-hidden="true">▦</span></button>
-              <strong>Guantonio's</strong>
-              <span>Lodi service</span>
+          <nav className="resyos-app-rail" aria-label="Operator sections">
+            {[
+              { icon: 'book', label: 'Book', count: bookedCount },
+              { icon: 'floor', label: 'Floor', count: activeBookings.length },
+              { icon: 'wait', label: 'Wait', count: holds.length },
+              { icon: 'guest', label: 'Guests', count: bookings.length },
+              { icon: 'reports', label: 'Reports', count: previewCount }
+            ].map((item, index) => (
+              <button type="button" key={item.label} className={index === 1 ? 'active' : ''} aria-label={item.label} aria-pressed={index === 1}>
+                <span aria-hidden="true"><OperatorIcon name={item.icon} /></span>
+                <small>{item.label}</small>
+                {item.count > 0 && <strong>{item.count}</strong>}
+              </button>
+            ))}
+            <button type="button" className="rail-reset" onClick={resetDemo} disabled={busy} aria-label="Reset demo data">
+              <span aria-hidden="true"><OperatorIcon name="reset" /></span>
+              <small>Reset</small>
+            </button>
+          </nav>
+          <div className="resyos-main-console">
+            <header className="resyos-topbar">
+              <div className="resyos-venue">
+                <button type="button" aria-label="Open service menu"><span aria-hidden="true">▦</span></button>
+                <strong>Guantonio's</strong>
+                <span>Lodi service</span>
+              </div>
+              <div className="resyos-date-controls" aria-label="Date and shift controls">
+                <button type="button" aria-label="Previous service">‹</button>
+                <span>{new Date(serviceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                <button type="button" aria-label="Open date picker">▣</button>
+                <strong>Dinner</strong>
+                <button type="button" aria-label="Next service">›</button>
+              </div>
+              <div className="resyos-mode-controls" aria-label="View controls">
+                <button type="button">Floor</button>
+                <button type="button">Timeline</button>
+                <button type="button">Availability</button>
+              </div>
+              <p className="resyos-live-status" role="status">{status}</p>
+            </header>
+            <div className="resyos-party-row" aria-label="Party size filters">
+              <span>Party Size</span>
+              {[1, 2, 3, 4, 5, 6, '7+'].map(size => <button type="button" key={size}>{size}</button>)}
+              <p>Group By: <strong>Floor Plan</strong></p>
             </div>
-            <div className="resyos-date-controls" aria-label="Date and shift controls">
-              <button type="button" aria-label="Previous service">‹</button>
-              <span>{new Date(serviceDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-              <button type="button" aria-label="Open date picker">▣</button>
-              <strong>Dinner</strong>
-              <button type="button" aria-label="Next service">›</button>
-            </div>
-            <div className="resyos-mode-controls" aria-label="View controls">
-              <button type="button">Floor</button>
-              <button type="button">Timeline</button>
-              <button type="button" onClick={resetDemo} disabled={busy}>Reset</button>
-            </div>
-            <p className="resyos-live-status" role="status">{status}</p>
-          </header>
-          <div className="resyos-party-row" aria-label="Party size filters">
-            <span>Party Size</span>
-            {[1, 2, 3, 4, 5, 6, '7+'].map(size => <button type="button" key={size}>{size}</button>)}
-            <p>Group By: <strong>Floor Plan</strong></p>
-          </div>
-          <section className="service-strip" aria-label="Service summary">
-            <article><span>Dine-in covers</span><strong>{activeCount}</strong></article>
-            <article><span>Booked</span><strong>{bookedCount}</strong></article>
-            <article><span>Checked in</span><strong>{checkInCount}</strong></article>
-            <article><span>Seated</span><strong>{seatedCount}</strong></article>
-            <article><span>Text previews</span><strong>{previewCount}</strong></article>
-          </section>
-          <section className="resyos-workbench">
-            <aside className="resyos-left-rail" aria-label="Guest queues">
+            <section className="service-strip" aria-label="Service summary">
+              <article><span>Dine-in covers</span><strong>{activeCount}</strong></article>
+              <article><span>Booked</span><strong>{bookedCount}</strong></article>
+              <article><span>Checked in</span><strong>{checkInCount}</strong></article>
+              <article><span>Seated</span><strong>{seatedCount}</strong></article>
+              <article><span>Text previews</span><strong>{previewCount}</strong></article>
+            </section>
+            <section className="resyos-workbench">
+              <aside className="resyos-left-rail" aria-label="Guest queues">
               <div className="queue-search" aria-label="Guest search preview">Search guest or reference</div>
               <div className="queue-tabs" aria-label="Reservation queues">
                 {railGroups.map(group => (
@@ -560,7 +607,10 @@ function OperatorPage() {
                 </div>
                 {bookings.length === 0 && <p>No synthetic bookings yet.</p>}
                 {bookings.map(booking => (
-                  <article key={booking.reference} className={`operator-row ${booking.status}`}>
+                  <article key={booking.reference} className={`operator-row ${booking.status} ${selectedBooking?.reference === booking.reference ? 'selected' : ''}`}>
+                    <button type="button" className="operator-row-select" onClick={() => setSelectedReference(booking.reference)} aria-label={`Select ${booking.guestLabel || 'Demo Guest'} ${booking.reference}`}>
+                      <span className="sr-only">Select reservation</span>
+                    </button>
                     <div className="operator-guest">
                       <strong>{booking.guestLabel || 'Demo Guest'}</strong>
                       <span>{booking.reference}</span>
@@ -568,6 +618,11 @@ function OperatorPage() {
                     <div className="operator-time">
                       <strong>{formatLocalTime(booking.startsAt)}</strong>
                       <span>{booking.partySize} guests · {booking.section} · table {booking.tableCode || 'pending'}</span>
+                    </div>
+                    <div className="operator-tags" aria-label="Guest service notes">
+                      <span>First visit</span>
+                      <span>{booking.section}</span>
+                      <span>{booking.partySize} top</span>
                     </div>
                     <span className="status-pill">{statusLabel(booking.status)}</span>
                     <div className="operator-actions">
@@ -582,20 +637,39 @@ function OperatorPage() {
             </aside>
             <section className="resyos-floor-stage" aria-label="Floor plan timeline">
               <div className="timeline-head" aria-label="Service timeline">
-                {timeSlots.map(slot => <span key={slot}>{slot}</span>)}
+                {timeSlots.map((slot, index) => (
+                  <span key={slot} className={index === 5 ? 'now' : ''}>
+                    {slot}
+                    <small>{index === 5 ? 'active' : `${Math.max(0, activeCount - index)}/10`}</small>
+                  </span>
+                ))}
               </div>
               <div className="floor-plan-panel">
                 {sectionNames.map(sectionName => (
                   <section key={sectionName} className="floor-section" aria-label={`${sectionName} table map`}>
-                    <h2>{sectionName}</h2>
-                    <div className="floor-map" aria-label={`${sectionName} synthetic floor map`}>
-                      {tableCodes.slice(sectionName === 'Dining Room' ? 0 : 16, sectionName === 'Dining Room' ? 16 : 24).map((code, index) => {
-                        const booking = bookingsByTable.get(code);
-                        const tileStatus = booking ? booking.status : index % 7 === 0 ? 'blocked' : 'open';
+                    <div className="floor-section-head">
+                      <h2>{sectionName}</h2>
+                      <span>{sectionName === 'Dining Room' ? 'Host stand · dining room · bar' : 'Patio rail · counter'}</span>
+                    </div>
+                    <div className={`floor-map floor-map-${sectionName === 'Dining Room' ? 'dining' : 'patio'}`} aria-label={`${sectionName} synthetic floor map`}>
+                      <span className="floor-landmark host">Host</span>
+                      <span className="floor-landmark kitchen">{sectionName === 'Dining Room' ? 'Kitchen' : 'Gate'}</span>
+                      <span className="floor-landmark bar">{sectionName === 'Dining Room' ? 'Pizza oven' : 'Bar'}</span>
+                      {floorTables.filter(table => table.section === sectionName).map((table, index) => {
+                        const booking = bookingsByTable.get(table.code);
+                        const tileStatus = booking ? booking.status : index % 9 === 0 ? 'blocked' : 'open';
                         return (
-                          <button type="button" key={code} className={`floor-table ${tileStatus}`} aria-label={`Table ${code}${booking ? `, ${statusLabel(booking.status)}` : ', open'}`}>
-                            <strong>{code}</strong>
-                            <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : '00'}</span>
+                          <button
+                            type="button"
+                            key={table.code}
+                            className={`floor-table ${table.shape} ${tileStatus} ${booking && selectedBooking?.reference === booking.reference ? 'selected' : ''}`}
+                            style={{ left: `${table.x}%`, top: `${table.y}%`, width: `${table.w}%`, height: `${table.h}%` }}
+                            onClick={() => booking && setSelectedReference(booking.reference)}
+                            aria-pressed={Boolean(booking && selectedBooking?.reference === booking.reference)}
+                            aria-label={`Table ${table.code}, ${table.seats} seats${booking ? `, ${statusLabel(booking.status)}, ${booking.partySize} guests at ${formatLocalTime(booking.startsAt)}` : ', open'}`}
+                          >
+                            <strong>{table.code}</strong>
+                            <span>{booking ? `${booking.partySize} · ${formatLocalTime(booking.startsAt)}` : `${table.seats}p`}</span>
                           </button>
                         );
                       })}
@@ -618,8 +692,25 @@ function OperatorPage() {
             <aside className="floor-panel resyos-side-panel" tabIndex={0} aria-label="Service details">
               <section aria-labelledby="floor-title">
                 <h2 id="floor-title">Floor snapshot</h2>
-                <p>Color states mirror the service queue: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
+                <p>Spatial map mirrors the service queue: booked, checked in, seated, finished, cancelled, open, or blocked.</p>
+                <div className="floor-legend" aria-label="Floor status legend">
+                  <span><i className="legend-confirmed"></i>Booked</span>
+                  <span><i className="legend-checked"></i>Checked in</span>
+                  <span><i className="legend-seated"></i>Seated</span>
+                  <span><i className="legend-done"></i>Done</span>
+                </div>
               </section>
+              {selectedBooking && (
+                <section aria-labelledby="selected-party-title" className="selected-party-panel">
+                  <h2 id="selected-party-title">Selected party</h2>
+                  <strong>{selectedBooking.guestLabel || 'Demo Guest'}</strong>
+                  <p>{formatLocalTime(selectedBooking.startsAt)} · {selectedBooking.partySize} guests · table {selectedBooking.tableCode || 'pending'} · {statusLabel(selectedBooking.status)}</p>
+                  <div className="side-actions">
+                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'checked_in')}>Check in</button>
+                    <button disabled={busy} onClick={() => setBookingStatus(selectedBooking.reference, 'seated')}>Seat</button>
+                  </div>
+                </section>
+              )}
               <section aria-labelledby="holds-title">
                 <h2 id="holds-title">Recent holds</h2>
                 {holds.length === 0 ? <p>No open demo holds.</p> : holds.slice(0, 4).map(hold => <p key={hold.id}>{formatLocalTime(hold.startsAt)} · {hold.partySize} · {hold.section} · {statusLabel(hold.status)}</p>)}
@@ -629,11 +720,23 @@ function OperatorPage() {
                 {notifications.length === 0 ? <p>No previews yet.</p> : notifications.slice(0, 3).map((n, i) => <p key={`${n.createdAt}-${i}`}>{n.eventType}: {n.status}</p>)}
               </section>
             </aside>
-          </section>
+            </section>
+          </div>
         </section>
       )}
     </main>
   );
+}
+
+
+function OperatorIcon({ name }: { name: string }) {
+  const shared = { width: 23, height: 23, viewBox: '0 0 24 24', fill: 'none', xmlns: 'http://www.w3.org/2000/svg', focusable: false };
+  if (name === 'book') return <svg {...shared}><path d="M6 5.5h8.5A3.5 3.5 0 0 1 18 9v9.5H8.5A2.5 2.5 0 0 1 6 16V5.5Z" stroke="currentColor" strokeWidth="2"/><path d="M9 9h5M9 13h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+  if (name === 'floor') return <svg {...shared}><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="2"/><path d="M8 9h8M8 15h8M12 5v14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+  if (name === 'wait') return <svg {...shared}><circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2"/><path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  if (name === 'guest') return <svg {...shared}><circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="2"/><path d="M4.5 19a4.5 4.5 0 0 1 9 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M16 8.5a2.5 2.5 0 1 1-1 4.8M15.5 16.5a4 4 0 0 1 4 2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+  if (name === 'reports') return <svg {...shared}><path d="M5 19V5h14v14H5Z" stroke="currentColor" strokeWidth="2"/><path d="M9 16v-4M12 16V8M15 16v-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+  return <svg {...shared}><path d="M6.5 7.5A7.5 7.5 0 1 1 5 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M5 5v4h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 
 function NotFound() {
