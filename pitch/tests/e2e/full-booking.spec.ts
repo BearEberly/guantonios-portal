@@ -47,8 +47,13 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await page.getByRole('button', { name: /open operator view/i }).click();
   await expect(page.getByText(reference)).toBeVisible();
   await page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) }).click();
-  await page.getByRole('button', { name: /Table P1, 2 seats, open, tap to seat/i }).click();
+  const patioTable = page.getByRole('button', { name: /Table P1, 2 seats/i });
+  await expect(patioTable).toBeVisible();
+  await patioTable.click();
 
   await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
-  await expect(page.getByText(/2 guests · outdoor · table P1 · Seated/i)).toBeVisible();
+  await expect(page.getByText(/2 guests · outdoor · table P1/i)).toBeVisible();
+  const selectedParty = page.locator('.selected-party-panel');
+  await expect(selectedParty).toContainText('table P1');
+  await expect(selectedParty).toContainText('Seated');
 });
