@@ -83,13 +83,13 @@ test('operator can seat a selected party by tapping an open floor table', async 
   await page.getByLabel(/operator passcode/i).fill(operatorToken!);
   await page.getByRole('button', { name: /open operator view/i }).click();
   await selectReservationRow(page, reference);
-  const patioTable = page.getByRole('button', { name: /Table P1, 2 seats/i });
+  const patioTable = page.getByRole('button', { name: /Table P2, 2 seats/i });
   await expect(patioTable).toBeVisible();
   await patioTable.click();
 
-  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P2`))).toBeVisible();
   const selectedParty = page.locator('.selected-party-panel');
-  await expect(selectedParty).toContainText(/2 guests · outdoor · table P1/i);
+  await expect(selectedParty).toContainText(/2 guests · outdoor · table P2/i);
   await expect(selectedParty).toContainText('Seated');
 });
 
@@ -110,13 +110,13 @@ test('operator can drag a reservation to an open floor table', async ({ page, re
   await page.getByRole('button', { name: /open operator view/i }).click();
   await expect(page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) })).toBeVisible();
   const dragSource = page.getByRole('button', { name: new RegExp(`Select .* ${reference}`) });
-  const patioTable = page.getByRole('button', { name: /Table P1, 2 seats/i });
+  const patioTable = page.getByRole('button', { name: /Table P2, 2 seats/i });
   await expect(dragSource).toBeVisible();
   await expect(patioTable).toBeVisible();
   await dragSource.dragTo(patioTable);
 
-  await expect(page.getByText(new RegExp(`(Dropped|Seated) ${reference} at table P1`))).toBeVisible();
-  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+  await expect(page.getByText(new RegExp(`(Dropped|Seated) ${reference} at table P2`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P2/i);
 });
 
 test('operator can use Move table mode as a touch fallback', async ({ page, request }) => {
@@ -136,10 +136,10 @@ test('operator can use Move table mode as a touch fallback', async ({ page, requ
   await selectReservationRow(page, reference);
   await page.getByRole('button', { name: /move table/i }).click();
   await expect(page.getByText(/drag this party or tap an open highlighted table/i)).toBeVisible();
-  await page.getByRole('button', { name: /Table P1, 2 seats, open, drop/i }).click();
+  await page.getByRole('button', { name: /Table P2, 2 seats, open, drop/i }).click();
 
-  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
-  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P2`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P2/i);
 });
 
 
@@ -182,10 +182,10 @@ test('operator can load and update a guestbook profile on the iPad', async ({ pa
   await page.getByRole('button', { name: /^search$/i }).click();
   await expect(page.getByRole('button', { name: /^Indoor$/i }).first()).toBeVisible();
   await page.getByRole('button', { name: /^Indoor$/i }).first().click();
-  await page.locator('#firstName').fill('Guestbook');
   await page.locator('#lastName').fill('Tester');
   await page.locator('#mobile').fill('(209) 555-0188');
   await page.locator('#request').fill('Sparkling water preference.');
+  await page.locator('#firstName').fill('Guestbook');
   await page.getByRole('button', { name: /confirm demo reservation/i }).click();
   await expect(page.getByRole('heading', { name: /demo reservation confirmed/i })).toBeVisible();
   const reference = (await page.locator('.reference').innerText()).trim();
@@ -239,8 +239,8 @@ test('operator can create and seat a booking from the iPad Book rail', async ({ 
   await page.getByLabel('View controls').getByRole('button', { name: /^Timeline$/i }).click();
   await expect(page.getByLabel('Table lane reservation book')).toBeVisible();
   await expect(page.locator('.timeline-reservation-card').filter({ hasText: reference! })).toBeVisible();
-  await page.getByRole('button', { name: new RegExp(`Seat ${reference} at table P1 from 5:00`) }).click();
+  await page.getByRole('button', { name: new RegExp(`Seat ${reference} at table P2 from 5:00`) }).click();
 
-  await expect(page.getByText(new RegExp(`Seated ${reference} at table P1`))).toBeVisible();
-  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P1/i);
+  await expect(page.getByText(new RegExp(`Seated ${reference} at table P2`))).toBeVisible();
+  await expect(page.locator('.selected-party-panel')).toContainText(/2 guests · outdoor · table P2/i);
 });
